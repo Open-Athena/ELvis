@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { Vector3 } from 'three'
+import type { LatticeMatrix } from '../types.ts'
 import type { VolumeData } from '../types.ts'
 import { IsosurfaceRenderer } from './IsosurfaceRenderer.tsx'
 import { CrystalStructure } from './CrystalStructure.tsx'
@@ -13,6 +14,32 @@ import type { CameraSnapTarget } from './CameraController.tsx'
 import { SlicePlane3D } from './SlicePlane3D.tsx'
 import { fracToCart } from '../utils/lattice.ts'
 import { computeTiles } from '../utils/tiling.ts'
+
+const _projA = new Vector3()
+const _projB = new Vector3()
+
+/** Projects face centers at slice idx 0 and N to screen; writes ±1 to signRef */
+function SliceSignUpdater({ lattice, sliceAxis, signRef }: {
+  lattice: LatticeMatrix
+  sliceAxis: 0 | 1 | 2
+  signRef: MutableRefObject<number>
+}) {
+  const { camera } = useThree()
+  const points = useMemo(() => {
+    const frac0: [number, number, number] = [0.5, 0.5, 0.5]
+    frac0[sliceAxis] = 0
+    const fracN: [number, number, number] = [0.5, 0.5, 0.5]
+    fracN[sliceAxis] = 1
+    return { p0: fracToCart(lattice, frac0), pN: fracToCart(lattice, fracN) }
+  }, [lattice, sliceAxis])
+
+  useFrame(() => {
+    _projA.set(...points.p0).project(camera)
+    _projB.set(...points.pN).project(camera)
+    signRef.current = _projB.x > _projA.x ? 1 : -1
+  })
+  return null
+}
 
 interface DensityViewerProps {
   volume: VolumeData
@@ -37,6 +64,7 @@ interface DensityViewerProps {
   tilePadding?: number
   tileFade?: number
   abcIsXyz?: boolean
+  sliceStepSignRef?: MutableRefObject<number>
 }
 
 export function DensityViewer({
@@ -62,6 +90,7 @@ export function DensityViewer({
   tilePadding = 0,
   tileFade = 1,
   abcIsXyz,
+  sliceStepSignRef,
 }: DensityViewerProps) {
   const tiles = useMemo(() => {
     if (tilePadding <= 0) return undefined
@@ -109,6 +138,9 @@ export function DensityViewer({
         )}
 
         {activeMovements && <CameraController activeMovements={activeMovements} cameraSnap={cameraSnap} animationDuration={animationDuration} onCameraChange={onCameraChange} initialCamera={initialCamera} initialTargetOffset={initialTargetOffset} center={center} />}
+        {sliceStepSignRef && sliceAxis !== undefined && (
+          <SliceSignUpdater lattice={volume.lattice} sliceAxis={sliceAxis} signRef={sliceStepSignRef} />
+        )}
 
         <OrbitControls makeDefault target={center.toArray()} />
         <GizmoHelper alignment="bottom-right" margin={[80, 36]}>

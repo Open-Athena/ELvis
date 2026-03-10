@@ -340,36 +340,8 @@ export default function App() {
     }
   }, [primaryFile])
 
-  // Compute sign so arrow-left/right match visual screen direction for slice stepping.
-  // Dot the slice-axis world direction with the camera's screen-right vector; if positive,
-  // increasing index moves rightward on screen (ArrowRight → +si), else flip.
-  const sliceStepSign = useMemo(() => {
-    if (!primaryFile || !cam) return 1
-    const lat = primaryFile.data.lattice
-    const unitVec: [number, number, number] = [0, 0, 0]
-    unitVec[sliceAxis] = 1
-    const sliceDir = fracToCart(lat, unitVec)
-    const theta = cam[0] * Math.PI / 180
-    const phi = cam[1] * Math.PI / 180
-    const roll = cam[3] * Math.PI / 180
-    // Camera right (before roll) = (cosθ, 0, -sinθ)
-    const rx = Math.cos(theta), rz = -Math.sin(theta)
-    // Camera up (before roll) = (-sinθ cosφ, sinφ, -cosθ cosφ)
-    const ux = -Math.sin(theta) * Math.cos(phi)
-    const uy = Math.sin(phi)
-    const uz = -Math.cos(theta) * Math.cos(phi)
-    // After roll: right_rolled = right*cos(ρ) − up*sin(ρ)
-    // (camera right = cross(viewDir, cameraUp); the − follows from expanding cameraUp
-    //  = worldUp_perp·cos(ρ) + right_noroll·sin(ρ) and using cross identities)
-    const cr = Math.cos(roll), sr = Math.sin(roll)
-    const rrx = rx * cr - ux * sr
-    const rry = -uy * sr  // right_y before roll is 0
-    const rrz = rz * cr - uz * sr
-    const dot = sliceDir[0] * rrx + sliceDir[1] * rry + sliceDir[2] * rrz
-    return dot >= 0 ? 1 : -1
-  }, [primaryFile, cam, sliceAxis])
-  const sliceStepSignRef = useRef(sliceStepSign)
-  sliceStepSignRef.current = sliceStepSign
+  // Slice step sign: updated per-frame inside Canvas by projecting face centers to screen
+  const sliceStepSignRef = useRef(1)
 
   // Detect axis-aligned (orthogonal) lattice: abc ≡ xyz when off-diagonal elements are ~0
   const abcIsXyz = useMemo(() => {
@@ -1197,6 +1169,7 @@ export default function App() {
                   tilePadding={tilePadding}
                   tileFade={tileFade}
                   abcIsXyz={abcIsXyz}
+                  sliceStepSignRef={sliceStepSignRef}
                 />
               )}
               {showSlice && (() => {
