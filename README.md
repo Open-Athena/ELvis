@@ -5,7 +5,7 @@ Interactive 3D electron density viewer for VASP CHGCAR/ELFCAR files and [Materia
 **[Try it live →][demo]**
 
 <p align="center">
-  <a href="https://elvis.rbw.sh/?m=mp-1000020&xb&xa&do">
+  <a href="https://elvis.oa.dev/?m=mp-1000020&xb&xa&do">
     <img src="pkgs/static/public/scrns/orbit-updown.gif" alt="ELvis – 3D orbit of Fe₂Cu₂O₄ electron density" width="600" />
   </a>
 </p>
@@ -13,7 +13,7 @@ Interactive 3D electron density viewer for VASP CHGCAR/ELFCAR files and [Materia
 **Periodic tiling with slice sweep:**
 
 <p align="center">
-  <a href="https://elvis.rbw.sh/?iso=571.4&c=70.1+54.6+13.5+-88&od=30&si=0&a=0.5&tp=0.5&ss=20&ct=0.426+-0.56+-0.00378&sl">
+  <a href="https://elvis.oa.dev/?iso=571.4&c=70.1+54.6+13.5+-88&od=30&si=0&a=0.5&tp=0.5&ss=20&ct=0.426+-0.56+-0.00378&sl">
     <img src="pkgs/static/public/scrns/tiling-slice-sweep.gif" alt="ELvis – Periodic tiling with slice sweep" width="600" />
   </a>
 </p>
@@ -35,12 +35,11 @@ Interactive 3D electron density viewer for VASP CHGCAR/ELFCAR files and [Materia
 ## Quick start
 
 ```bash
-cd elvis
 pnpm install
 pnpm dev        # → http://localhost:3150
 ```
 
-Or load a Materials Project example directly: [`elvis.rbw.sh/?m=mp-1000020`][demo]
+Or load a Materials Project example directly: [`elvis.oa.dev/?m=mp-1000020`][demo]
 
 ## URL parameters
 
@@ -76,7 +75,7 @@ pnpm scrns -i og-image  # just the og:image
 [React] · [Three.js] / [React Three Fiber] · [Vite] · [TypeScript] · [`use-kbd`] · [`use-prms`]
 
 [Materials Project]: https://materialsproject.org
-[demo]: https://elvis.rbw.sh/?m=mp-1000020&xb&xa
+[demo]: https://elvis.oa.dev/?m=mp-1000020&xb&xa
 [`scrns`]: https://www.npmjs.com/package/scrns
 [React]: https://react.dev
 [Three.js]: https://threejs.org
