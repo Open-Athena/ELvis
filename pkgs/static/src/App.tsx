@@ -1175,15 +1175,18 @@ export default function App() {
               {showSlice && (() => {
                 const d = primaryFile.data.grid.dims
                 const [sw, sh] = sliceAxis === 0 ? [d[1], d[2]] : sliceAxis === 1 ? [d[0], d[2]] : [d[0], d[1]]
+                const p = tilePadding > 0 ? tilePadding : 0
+                const extW = sw * (1 + 2 * p)
+                const extH = sh * (1 + 2 * p)
                 const maxDim = 200
-                const scale = maxDim / Math.max(sw, sh)
+                const scale = maxDim / Math.max(extW, extH)
                 return (
                   <div className={styles.slicePanel} style={{
                     position: 'absolute',
                     bottom: 0,
                     left: 0,
-                    width: Math.round(sw * scale),
-                    height: Math.round(sh * scale),
+                    width: Math.round(extW * scale),
+                    height: Math.round(extH * scale),
                     background: '#1a1a2e',
                     borderTop: '1px solid #333',
                     borderRight: '1px solid #333',
@@ -1192,6 +1195,9 @@ export default function App() {
                       volume={primaryFile.data}
                       axis={sliceAxis}
                       sliceIndex={effectiveSliceIndex}
+                      padding={tilePadding}
+                      fade={tileFade}
+                      showAbcCell={showAbcCell}
                     />
                   </div>
                 )

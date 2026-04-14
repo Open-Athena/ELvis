@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
-import { CanvasTexture, DoubleSide, NearestFilter } from 'three'
+import { CanvasTexture, DoubleSide, NearestFilter, RepeatWrapping } from 'three'
 import type { LatticeMatrix } from '../types.ts'
 import { fracToCart } from '../utils/lattice.ts'
 import { viridis } from '../utils/colormap.ts'
+import { tileFadeCompile } from '../utils/tile-fade.ts'
 
 interface SlicePlane3DProps {
   lattice: LatticeMatrix
@@ -10,16 +11,20 @@ interface SlicePlane3DProps {
   sliceIndex: number
   dims: [number, number, number]
   data: Float32Array
+  padding?: number
+  fade?: number
 }
 
-export function SlicePlane3D({ lattice, axis, sliceIndex, dims, data }: SlicePlane3DProps) {
+export function SlicePlane3D({ lattice, axis, sliceIndex, dims, data, padding = 0, fade = 1 }: SlicePlane3DProps) {
   const { vertices, uvs, texture } = useMemo(() => {
     const t = (sliceIndex + 0.5) / dims[axis]
-    // Build 4 corners of the slice quad in fractional coords
     const axes = [0, 1, 2].filter(a => a !== axis)
+    const lo = -padding
+    const hi = 1 + padding
+    // 4 corners of the slice quad in fractional coords, extended by padding in-plane
     const corners: [number, number, number][] = []
-    for (const u of [0, 1]) {
-      for (const v of [0, 1]) {
+    for (const u of [lo, hi]) {
+      for (const v of [lo, hi]) {
         const frac: [number, number, number] = [0, 0, 0]
         frac[axis] = t
         frac[axes[0]] = u
@@ -27,20 +32,20 @@ export function SlicePlane3D({ lattice, axis, sliceIndex, dims, data }: SlicePla
         corners.push(frac)
       }
     }
-    // Convert to Cartesian: corners are [00, 01, 10, 11]
-    // Triangles: (00,10,01), (10,11,01)
+    // Convert to Cartesian: corners are [lo_lo, lo_hi, hi_lo, hi_hi]
+    // Triangles: (lo_lo, hi_lo, lo_hi), (hi_lo, hi_hi, lo_hi)
     const c = corners.map(f => fracToCart(lattice, f))
     const verts = new Float32Array([
       ...c[0], ...c[2], ...c[1],
       ...c[2], ...c[3], ...c[1],
     ])
-    // UVs matching the triangle vertex order
+    // UVs match fractional in-plane position; RepeatWrapping tiles the one-period texture
     const uv = new Float32Array([
-      0, 0,  1, 0,  0, 1,
-      1, 0,  1, 1,  0, 1,
+      lo, lo,  hi, lo,  lo, hi,
+      hi, lo,  hi, hi,  lo, hi,
     ])
 
-    // Generate density texture for this slice
+    // Generate density texture for one period of this slice
     const w = dims[axes[0]]
     const h = dims[axes[1]]
     const canvas = document.createElement('canvas')
@@ -83,10 +88,17 @@ export function SlicePlane3D({ lattice, axis, sliceIndex, dims, data }: SlicePla
     tex.flipY = false  // Canvas row j maps directly to UV v = j/h; default true would flip the density
     tex.minFilter = NearestFilter
     tex.magFilter = NearestFilter
+    tex.wrapS = RepeatWrapping
+    tex.wrapT = RepeatWrapping
     tex.needsUpdate = true
 
     return { vertices: verts, uvs: uv, texture: tex }
-  }, [lattice, axis, sliceIndex, dims, data])
+  }, [lattice, axis, sliceIndex, dims, data, padding])
+
+  const fadeCompile = useMemo(() => {
+    if (padding <= 0) return undefined
+    return tileFadeCompile(lattice, padding, fade)
+  }, [lattice, padding, fade])
 
   return (
     <mesh>
@@ -101,6 +113,7 @@ export function SlicePlane3D({ lattice, axis, sliceIndex, dims, data }: SlicePla
         />
       </bufferGeometry>
       <meshBasicMaterial
+        key={`slice-${padding}-${fade}`}
         map={texture}
         transparent
         opacity={0.85}
@@ -109,6 +122,7 @@ export function SlicePlane3D({ lattice, axis, sliceIndex, dims, data }: SlicePla
         polygonOffset
         polygonOffsetFactor={1}
         polygonOffsetUnits={1}
+        onBeforeCompile={fadeCompile}
       />
     </mesh>
   )

@@ -134,7 +134,7 @@ export function DensityViewer({
         <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
         <CrystalStructure volume={volume} showAtoms={showAtoms} showAtomLabels={showAtomLabels} showAbcCell={showAbcCell} showXyzBox={showXyzBox} dashedLines={dashedLines} lineWidth={lineWidth} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
         {showSlice && sliceAxis !== undefined && sliceIndex !== undefined && (
-          <SlicePlane3D lattice={volume.lattice} axis={sliceAxis} sliceIndex={sliceIndex} dims={volume.grid.dims} data={volume.grid.data} />
+          <SlicePlane3D lattice={volume.lattice} axis={sliceAxis} sliceIndex={sliceIndex} dims={volume.grid.dims} data={volume.grid.data} padding={tilePadding} fade={tileFade} />
         )}
 
         {activeMovements && <CameraController activeMovements={activeMovements} cameraSnap={cameraSnap} animationDuration={animationDuration} onCameraChange={onCameraChange} initialCamera={initialCamera} initialTargetOffset={initialTargetOffset} center={center} />}
