@@ -1,3 +1,10 @@
 {
-  "dependencies": {}
+  "dependencies": {
+    "use-kbd": {
+      "localPath": "../../js/use-kbd",
+      "github": "runsascoded/use-kbd",
+      "npm": "use-kbd",
+      "distBranch": "dist"
+    }
+  }
 }
