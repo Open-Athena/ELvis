@@ -28,6 +28,7 @@ import { fetchVolumeFromUrl, fetchVolumeFromS3, s3UriToHttps, fetchVolumeJsonGz 
 import { decompressGzip } from './utils/gzip.ts'
 import { SSOAuthFlow } from './components/SSOAuthFlow.tsx'
 import { MaterialsSearch } from './MaterialsSearch.tsx'
+import { BrowseMaterials } from './BrowseMaterials.tsx'
 import type { FetchProgress } from './utils/fetch-volume.ts'
 import type { AWSCredentials } from './utils/aws-credentials.ts'
 import Tooltip from '@mui/material/Tooltip'
@@ -199,6 +200,7 @@ export default function App() {
   const [urlLoading, setUrlLoading] = useState(false)
   const [fetchStatus, setFetchStatus] = useState<string | null>(null)
   const [awsModalOpen, setAwsModalOpen] = useState(false)
+  const [browseOpen, setBrowseOpen] = useState(false)
   const [awsCreds, setAwsCreds] = useState<AWSCredentials | null>(loadCredentials)
   const [sizeConfirm, setSizeConfirm] = useState<{
     blob: Blob
@@ -400,6 +402,13 @@ export default function App() {
     group: 'View',
     defaultBindings: ['d'],
     handler: () => setDashedLines(!dashedLines),
+  })
+  useAction('materials:browse', {
+    label: 'Browse materials',
+    description: 'Open paginated materials table with filters',
+    group: 'Materials',
+    defaultBindings: ['shift+b'],
+    handler: () => setBrowseOpen(o => !o),
   })
   useAction('view:toggle-slice', {
     label: 'Toggle 2D slice',
@@ -1343,6 +1352,7 @@ export default function App() {
 
       <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
       <MaterialsSearch onSelect={setMaterialId} />
+      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={setMaterialId} />
       <Omnibar />
       <SequenceModal />
       <LookupModal />
