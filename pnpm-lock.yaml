@@ -61,6 +61,12 @@ importers:
         specifier: ^8.45.0
         version: 8.56.0(eslint@9.39.3)(typescript@5.9.3)
 
+  pkgs/corpora:
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
   pkgs/server:
     dependencies:
       '@elvis/core':
@@ -79,6 +85,9 @@ importers:
       '@elvis/core':
         specifier: workspace:*
         version: link:../core
+      '@elvis/corpora':
+        specifier: workspace:*
+        version: link:../corpora
       '@emotion/react':
         specifier: ^11.14.0
         version: 11.14.0(@types/react@19.2.14)(react@19.2.4)

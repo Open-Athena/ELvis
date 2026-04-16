@@ -27,6 +27,7 @@ import { loadCredentials, saveCredentials } from './utils/aws-credentials.ts'
 import { fetchVolumeFromUrl, fetchVolumeFromS3, s3UriToHttps, fetchVolumeJsonGz } from './utils/fetch-volume.ts'
 import { decompressGzip } from './utils/gzip.ts'
 import { SSOAuthFlow } from './components/SSOAuthFlow.tsx'
+import { MaterialsSearch } from './MaterialsSearch.tsx'
 import type { FetchProgress } from './utils/fetch-volume.ts'
 import type { AWSCredentials } from './utils/aws-credentials.ts'
 import Tooltip from '@mui/material/Tooltip'
@@ -1341,6 +1342,7 @@ export default function App() {
       />
 
       <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
+      <MaterialsSearch onSelect={setMaterialId} />
       <Omnibar />
       <SequenceModal />
       <LookupModal />
