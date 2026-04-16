@@ -1,0 +1,23 @@
+{
+  "electrai-205": {
+    "source": "s3://openathena/electrai/{input,label}/",
+    "format": "CHGCAR",
+    "paired": true,
+    "description": "ElectrAI paired SAD input + DFT label (original 205-sample set).",
+    "license": "MP: CC BY 4.0",
+    "count": 56
+  },
+  "dataset_4": {
+    "source": "s3://openathena/electrai/mp/chg_datasets/dataset_4/{data,label}/",
+    "format": "CHGCAR",
+    "paired": true,
+    "grid": [
+      128,
+      128,
+      128
+    ],
+    "description": "ElectrAI 2885-sample uniform-grid set (derived from MP dataset_4 via GGA DFT).",
+    "license": "MP: CC BY 4.0",
+    "count": 2753
+  }
+}

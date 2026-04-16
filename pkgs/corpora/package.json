@@ -1,0 +1,18 @@
+{
+  "name": "@elvis/corpora",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./data/*.json": "./data/*.json"
+  },
+  "scripts": {
+    "lint": "echo 'no lint configured'"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
