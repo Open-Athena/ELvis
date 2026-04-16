@@ -1,109 +1,178 @@
-# Spec: Material Search Completions in ELvis
-
-## Context
-
-ELvis uses [`use-kbd`][use-kbd] for keyboard shortcuts and modals, including an `Omnibar` and `LookupModal`. Currently, loading a specific material requires either:
-
-- Knowing the exact MP ID (`mp-1000020`) and typing it into the URL (`?m=mp-1000020`)
-- Drag-and-dropping a CHGCAR file
-- Picking from the Materials Project public S3 bucket (`s3://materialsproject-parsed`)
-
-We know several datasets of interest for the ElectrAI project:
-
-1. **ElectrAI S3 original (205 samples)** — `s3://openathena/electrai/{input,label}/`
-2. **ElectrAI dataset_4 (2,885 samples)** — `s3://openathena/electrai/mp/chg_datasets/dataset_4/`
-3. **Materials Project public bucket** — many more materials, but no paired SAD guesses
-
-[use-kbd]: https://github.com/runsascoded/use-kbd
+# Spec: Material Search Completions & `pkgs/corpora`
 
 ## Goal
 
-Make it easy to search for and load specific materials from any of our known datasets via keyboard-driven autocomplete, powered by `use-kbd`'s `Omnibar` or `LookupModal`.
+Make ELvis a one-stop shop for **browsing, searching, and direct-loading** materials from several public and internal data corpora (Materials Project, ElectrAI pairs, OMOL, QM9, ...) via:
 
-## Proposed UX
+1. **Omnibar autocomplete** (`use-kbd`) — type-ahead search over MP ID, formula, chemsys, element sets; dataset badges; Enter loads the material.
+2. **Paginated browse/filter table** — element chips, crystal-system filter, band-gap range, dataset-membership filter, sort. Rows load into the viewer.
 
-### Autocomplete search
+Backed by a unified materials index stored in a new `pkgs/corpora/` workspace package.
 
-- Press `/` (or similar) → Omnibar opens
-- Typing `mp-1` shows autocomplete of MP IDs matching the prefix
-- Autocomplete results are annotated with which dataset(s) contain the material (`[electrai-205]`, `[dataset_4]`, `[MP public]`)
-- Enter selects the material, loads it via the existing `?m=` URL param
+## Key discovery — IDs in our S3 bucket are *task IDs*, not material IDs
 
-### Dataset filtering
+`s3://openathena/electrai/{input,label,mp/chg_datasets/dataset_4/{data,label}}/mp-XXXXXXX.CHGCAR` — the `mp-XXXXXXX` on these filenames are **VASP task IDs**, not current-MP `material_id`s.
 
-- Prefix modifiers:
-  - `mp-1234567` — searches all known datasets
-  - `e:mp-1234567` — restrict to ElectrAI (paired input/label available)
-  - `d4:mp-1234567` — restrict to dataset_4
-  - `mp:mp-1234567` — MP public only
-- Or: a "dataset" picker button/dropdown in the Omnibar
+- Of our 3069 unique task IDs across all ElectrAI datasets, **zero** are in the current MP API.
+- But all 3069 map 1-to-1 to **2771 unique current material IDs** via `task_id_to_material_id.json.gz` (on della at `/scratch/gpfs/ROSENGROUP/common/globus_share_OA/mp/metadata/`).
+- Those 2771 material IDs return full metadata (formula, spacegroup, band_gap, elements, …) from the MP API.
 
-### Structure name search (stretch)
+Multiple task IDs collapsing to one material is expected — different DFT calculations (relaxations, static runs, etc.) of the same crystal.
 
-- Some materials have known formulas/names: `Fe2Cu2O4`, `TiO2 rutile`, etc.
-- Would need metadata with formulas for each MP ID
-- MP API provides this, but we'd need to cache it
+### Implication for ELvis URLs
 
-## Data sources
+Current: `?m=mp-1775579` loads a CHGCAR named after a task ID. That's fine as-is for paired ElectrAI data (the S3 keys are task-ID-based), but search/display labels should show the **material ID + formula** as the human-facing identity.
 
-### ElectrAI filelists
+Schema below tracks both so we can map either direction.
 
-The repo (and various S3 locations) have `mp_filelist.txt` files listing the MP IDs for each dataset:
+## `pkgs/corpora/` layout
 
-- `s3://openathena/electrai/mp/chg_datasets/dataset_4/mp_filelist.txt` — 2,885 IDs
-- ElectrAI S3 original — get via `aws s3 ls s3://openathena/electrai/input/`
+```
+pkgs/corpora/
+  package.json              # @elvis/corpora workspace pkg
+  tsconfig.json
+  data/                     # Generated, committed JSON manifests
+    materials.json          # Primary unified index (see schema below)
+    datasets.json           # Per-corpus metadata (counts, licenses, source URIs)
+  scripts/                  # Python ETL (uv run shebangs)
+    fetch-della-metadata.py        # Pulls task_id↔material_id mappings from della
+    fetch-mp-metadata.py           # Fetches MP API metadata for material IDs
+    fetch-electrai-filelists.py    # Lists S3 prefixes; enumerates ElectrAI task IDs
+    build-manifest.py              # Joins all sources → materials.json
+  src/
+    types.ts                # Shared TS types (MaterialRecord, CorpusId, ...)
+    client.ts               # Zero-dep query helpers used by pkgs/static
+  cf/                       # (Future) CF Worker + D1 sources; defer until needed
+```
 
-These are static lists of IDs. Could be bundled at build time or fetched lazily.
+ETL scripts are run locally with `uv run` and check generated JSON into the repo. No build-time network dependencies.
 
-### Materials Project
+## Unified `materials.json` schema
 
-MP has ~150K+ materials. Can't bundle the full list. Options:
-- **Bundle a curated subset** (e.g., the 2,885 dataset_4 materials, plus any others Betsy/Hananeh have flagged)
-- **Fetch on-demand** from MP API (has rate limits, requires API key)
-- **Pre-compute a trie/search index** from the full MP list and host it as a static asset
+One record per **current material ID**. Each record tracks which corpora/datasets it belongs to, along with dataset-specific task-ID aliases (so ELvis can map `?m=mp-TASKID` → material record).
 
-Start with bundled lists. Expand later if needed.
+```jsonc
+{
+  "generated": "2026-04-16T...",
+  "schema_version": 1,
+  "corpora": { /* see datasets.json */ },
+  "records": [
+    {
+      "id": "mp-11625",                         // current MP material_id
+      "formula": "KCa(PO3)3",
+      "elements": ["K", "Ca", "P", "O"],
+      "chemsys": "Ca-K-O-P",
+      "nelements": 4,
+      "nsites": 48,
+      "crystal_system": "Hexagonal",
+      "spacegroup_symbol": "P6_3/m",
+      "spacegroup_number": 176,
+      "density": 2.845,
+      "volume": 512.3,
+      "band_gap": 5.047,
+      "is_metal": false,
+      "is_magnetic": false,
+      "ordering": "NM",
+      "theoretical": false,
+      "datasets": {
+        "electrai-205": { "task_ids": ["mp-1817843"], "has_input": true, "has_label": true },
+        "dataset_4":    { "task_ids": ["mp-2477964", "mp-..."], "has_input": true, "has_label": true }
+      }
+    },
+    // ...
+  ]
+}
+```
 
-## Future: OMOL (and other molecule datasets)
+### `datasets.json` (corpus definitions)
 
-OMOL is [Open Molecules 2025](https://huggingface.co/datasets/facebook/OMol25) — a molecular (not crystalline) dataset from Meta FAIR. Different file format, different structure (no periodic boundary conditions).
+```jsonc
+{
+  "electrai-205": {
+    "source": "s3://openathena/electrai/{input,label}/",
+    "format": "CHGCAR",
+    "paired": true,
+    "count": 205,
+    "description": "ElectrAI paired SAD input + DFT label (original 205-sample set)"
+  },
+  "dataset_4": {
+    "source": "s3://openathena/electrai/mp/chg_datasets/dataset_4/{data,label}/",
+    "format": "CHGCAR",
+    "paired": true,
+    "grid": [128, 128, 128],
+    "count": 2885,
+    "description": "ElectrAI 2885-sample uniform-grid set from MP dataset_4"
+  },
+  "mp-public": {
+    "source": "s3://materialsproject-parsed/chgcars/",
+    "format": "CHGCAR-json.gz",
+    "paired": false,
+    "count": 403917,
+    "description": "Materials Project parsed CHGCAR bucket (all MP IDs with charge density)",
+    "license": "CC BY 4.0"
+  }
+  // Future: "omol", "qm9", etc.
+}
+```
 
-ELvis currently assumes periodic CHGCAR format. Supporting OMOL would require:
+## Omnibar UX
 
-- Handling non-periodic structures (molecules in vacuum, no lattice)
-- Different file format parsing (OMOL uses `.xyz` + `.npy` or similar, not CHGCAR)
-- Deciding what to display: electron density isn't really the same concept for isolated molecules, but orbitals/wavefunctions are
-- May warrant a separate ELvis "mode" for molecules vs crystals
+- `/` (or chosen key) opens Omnibar with "Materials" source.
+- Matches against `id`, `formula`, `chemsys`, `elements`, dataset task-IDs.
+- Input shortcuts:
+  - `mp-123` — prefix match on material ID
+  - `Fe2O3` — formula match
+  - `Fe O` or `Fe-O` — chemsys match
+  - `e:...` — restrict to ElectrAI (has paired input/label)
+  - `d4:...` — restrict to dataset_4
+- Results show: `mp-11625  KCa(PO3)3  Hexagonal  [electrai-205]`
+- Enter → existing `?m=` state updates + CHGCAR loads.
 
-This is a larger undertaking — consider as a phase 2 after crystal search is working.
+## Table browse view (`?view=browse` or modal)
 
-## Implementation sketch
+- Columns: id, formula, crystal system, spacegroup, elements, band gap, datasets
+- Multi-select element chips (Periodic-table picker or comma-separated text input)
+- Crystal-system dropdown
+- Band-gap range slider
+- Dataset filter checkboxes (single-source: metal/theoretical etc. follow-ups)
+- Click row → navigate to `/?m=<task_id>` (picks the first available task-ID from datasets priority order).
+- URL-encode filter state (`?q=...&elems=Fe,O&cs=cubic&gap=0:2`).
 
-1. **Bundle dataset manifests** at build time:
-   - `pkgs/static/src/data/electrai-manifest.json` — list of MP IDs with `{ id, source: 'electrai-205' | 'dataset_4', has_input: bool, has_label: bool }`
-   - Generate via a script that runs `aws s3 ls` on the relevant prefixes
+## Phasing
 
-2. **Update Omnibar / Lookup UI**:
-   - Add a "Materials" autocomplete source
-   - Filter by prefix as user types
-   - Show dataset badge per result
+**Phase 1 — `pkgs/corpora` data + Omnibar hook**
+- [ ] Scaffold `pkgs/corpora/` package (package.json, tsconfig, dirs)
+- [ ] `fetch-della-metadata.py`: copy needed mappings from della → `data/della-meta/`
+- [ ] `fetch-electrai-filelists.py`: list S3 prefixes → `data/filelists/*.txt`
+- [ ] `fetch-mp-metadata.py`: fetch MP summary for mapped material IDs
+- [ ] `build-manifest.py`: join everything → `data/materials.json` + `data/datasets.json`
+- [ ] `src/types.ts`, `src/client.ts` — lightweight query helpers
+- [ ] Wire Omnibar in `pkgs/static` to call the client; Enter sets `?m=`
 
-3. **URL params**:
-   - Existing `?m=mp-XXXXXXX` stays
-   - Add `?src=input|label` (from the other spec) for paired ElectrAI data
+**Phase 2 — Table browse view**
+- [ ] New `BrowseTable` component (virtualized row list, 2771+ entries)
+- [ ] Filter UI (element chips, crystal-system, band-gap, dataset)
+- [ ] URL state via `use-prms`
 
-4. **Performance**:
-   - 2,885 + 205 ≈ 3K IDs is tiny, all can live in-memory
-   - Even MP public (150K) could be loaded as a compressed static asset (~1-2 MB gzipped)
+**Phase 3 — Additional corpora**
+- [ ] `mp-public` — full MP index (~400K materials) from `s3://materialsproject-parsed` via parquet metadata ETL (only metadata, not CHGCAR blobs)
+- [ ] `omol` — [Open Molecules 2025](https://huggingface.co/datasets/facebook/OMol25) — separate pipeline, molecular not crystalline; likely a new viewer mode
+- [ ] `qm9` — small-molecule dataset, HuggingFace/other
+- [ ] Per-corpus licensing badges (MP CC BY 4.0; GNoME CC BY-NC excluded by default)
 
-## Follow-ups
+**Phase 4 (optional) — CF Worker + D1 API**
+- When `materials.json` crosses the "too big to bundle" threshold (~5–10 MB compressed?), or when we want other OA tools to query the same index.
+- `pkgs/corpora/cf/` Worker exposes `GET /materials?filter=...` backed by D1.
+- ETL scripts are repurposed to populate D1 (via `wrangler d1 execute`).
 
-- Once NN predictions are stored somewhere (e.g., S3 bucket), add them as a third "source" dimension (`src=prediction`)
-- Link to WandB/experiment tracking for materials where we have training results
-- Show per-material metadata (formula, space group, NMAE if available)
+## Licensing / attribution
+
+- **MP**: CC BY 4.0 — permitted to cache/redistribute with attribution. UI adds "Materials Project data under CC BY 4.0" credit (link).
+- **GNoME subset**: CC BY-NC — filter out unless we have explicit commercial-exclusion handling.
+- **OMOL**: Check HF dataset card (Meta/FAIR, Apache 2 or similar likely).
 
 ## Open questions
 
-- Should search match against MP numeric IDs (`mp-1234567`) only, or also formulas/names? Latter needs metadata fetching.
-- Is there a natural UI place for the "which dataset" filter, or should it default to "all" with dataset badges?
-- Should we prioritize the ElectrAI datasets over MP public, since they're our main use case?
+- Should we treat task-IDs as first-class in URLs, or rewrite `?m=mp-TASKID` → `?m=mp-MATID&task=...`? Status-quo (task-ID URLs) is simplest for paired ElectrAI data, where the task-ID *is* the S3 filename.
+- Prefer embedding full materials.json (2771 records ≈ 500 KB JSON, <150 KB gzipped) vs. a split (metadata-only vs. dataset-membership) vs. a tiny bootstrap + lazy chunks?
+- Omnibar vs. dedicated modal: use `LookupModal` from `use-kbd` or build a custom component that can also show per-result badges?
