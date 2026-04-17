@@ -1,25 +1,13 @@
 import { useMemo } from 'react'
 import { useOmnibarEndpoint } from 'use-kbd'
-import { searchMaterials } from '@elvis/corpora'
-import type { CorpusId, MaterialRecord, MaterialsManifest } from '@elvis/corpora'
+import { searchMaterials, resolveLoadUrl } from '@elvis/corpora'
+import type { MaterialRecord, MaterialsManifest } from '@elvis/corpora'
 import manifestJson from '@elvis/corpora/data/materials.json'
 
 const manifest = manifestJson as MaterialsManifest
 
-// Corpus preference for URL selection: paired/input-label data is most useful.
-const CORPUS_PRIORITY: CorpusId[] = ['electrai-205', 'dataset_4', 'mp-public', 'omol', 'qm9']
-
-function pickTaskId(record: MaterialRecord): string | undefined {
-  for (const corpus of CORPUS_PRIORITY) {
-    const m = record.datasets[corpus]
-    if (m && m.task_ids.length) return m.task_ids[0]
-  }
-  return undefined
-}
-
-function formatBadges(record: MaterialRecord): string {
-  const labels = Object.keys(record.datasets) as CorpusId[]
-  return labels.join(', ')
+function formatBadges(record: { datasets: Record<string, unknown> }): string {
+  return Object.keys(record.datasets).join(', ')
 }
 
 function formatDescription(record: MaterialRecord): string {
@@ -33,16 +21,10 @@ function formatDescription(record: MaterialRecord): string {
 }
 
 interface MaterialsSearchProps {
-  onSelect: (taskId: string) => void
+  /** Called with the resolved S3 URL for loading the selected material. */
+  onSelect: (url: string) => void
 }
 
-/**
- * Registers a "Materials" endpoint with the use-kbd Omnibar, providing type-ahead
- * search across our corpora (MP IDs, formulas, chemsys, elements, task IDs).
- *
- * Selecting an entry invokes `onSelect(taskId)` — the caller wires that to
- * whatever URL state / load routine it uses (typically `setMaterialId`).
- */
 export function MaterialsSearch({ onSelect }: MaterialsSearchProps) {
   const config = useMemo(() => ({
     group: 'Materials',
@@ -54,13 +36,13 @@ export function MaterialsSearch({ onSelect }: MaterialsSearchProps) {
       const page = hits.slice(pagination.offset, pagination.offset + pagination.limit)
       return {
         entries: page.map(r => {
-          const taskId = pickTaskId(r)
+          const url = resolveLoadUrl(r)
           return {
             id: r.id,
             label: `${r.id}  ${r.formula}`,
             description: formatDescription(r),
             keywords: [r.chemsys, ...r.elements],
-            handler: taskId ? () => onSelect(taskId) : () => { /* no task ID available */ },
+            handler: url ? () => onSelect(url) : () => {},
           }
         }),
         total: hits.length,

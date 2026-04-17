@@ -7,3 +7,4 @@ export type {
   MaterialsManifest,
 } from './types.ts'
 export { searchMaterials, loadManifest } from './client.ts'
+export { resolveLoadUrl } from './resolve-url.ts'

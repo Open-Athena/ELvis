@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { searchMaterials } from '@elvis/corpora'
+import { searchMaterials, resolveLoadUrl } from '@elvis/corpora'
 import type { CorpusId, MaterialRecord, MaterialsManifest } from '@elvis/corpora'
 import manifestJson from '@elvis/corpora/data/materials.json'
 
@@ -15,16 +15,6 @@ const CRYSTAL_SYSTEMS = [
   'Cubic',
 ] as const
 
-const CORPUS_PRIORITY: CorpusId[] = ['electrai-205', 'dataset_4', 'mp-public', 'omol', 'qm9']
-
-function pickTaskId(record: MaterialRecord): string | undefined {
-  for (const corpus of CORPUS_PRIORITY) {
-    const m = record.datasets[corpus]
-    if (m && m.task_ids.length) return m.task_ids[0]
-  }
-  return undefined
-}
-
 const CORPORA: { id: CorpusId; label: string }[] = (
   Object.keys(manifest.corpora) as CorpusId[]
 ).map(id => ({ id, label: `${id} (${manifest.corpora[id].count})` }))
@@ -34,7 +24,7 @@ const PAGE_SIZE = 50
 interface BrowseMaterialsProps {
   open: boolean
   onClose: () => void
-  onSelect: (taskId: string) => void
+  onSelect: (url: string) => void
 }
 
 export function BrowseMaterials({ open, onClose, onSelect }: BrowseMaterialsProps) {
@@ -77,9 +67,9 @@ export function BrowseMaterials({ open, onClose, onSelect }: BrowseMaterialsProp
   }
 
   const handleRowClick = (r: MaterialRecord) => {
-    const taskId = pickTaskId(r)
-    if (!taskId) return
-    onSelect(taskId)
+    const url = resolveLoadUrl(r)
+    if (!url) return
+    onSelect(url)
     onClose()
   }
 

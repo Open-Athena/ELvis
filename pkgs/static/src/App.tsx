@@ -1351,8 +1351,8 @@ export default function App() {
       />
 
       <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
-      <MaterialsSearch onSelect={taskId => handleUrlSubmit(mpS3Uri(taskId))} />
-      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={taskId => handleUrlSubmit(mpS3Uri(taskId))} />
+      <MaterialsSearch onSelect={handleUrlSubmit} />
+      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} />
       <Omnibar />
       <SequenceModal />
       <LookupModal />
