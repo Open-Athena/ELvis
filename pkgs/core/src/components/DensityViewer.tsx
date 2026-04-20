@@ -6,6 +6,7 @@ import { Vector3 } from 'three'
 import type { LatticeMatrix } from '../types.ts'
 import type { VolumeData } from '../types.ts'
 import { IsosurfaceRenderer } from './IsosurfaceRenderer.tsx'
+import { VolumeRenderer } from './VolumeRenderer.tsx'
 import { CrystalStructure } from './CrystalStructure.tsx'
 import { LatticeGizmo } from './LatticeGizmo.tsx'
 import { ScreenOffsetGroup } from './ScreenOffsetGroup.tsx'
@@ -65,6 +66,7 @@ interface DensityViewerProps {
   tileFade?: number
   abcIsXyz?: boolean
   sliceStepSignRef?: MutableRefObject<number>
+  useGpuVolume?: boolean
 }
 
 export function DensityViewer({
@@ -91,6 +93,7 @@ export function DensityViewer({
   tileFade = 1,
   abcIsXyz,
   sliceStepSignRef,
+  useGpuVolume,
 }: DensityViewerProps) {
   const tiles = useMemo(() => {
     if (tilePadding <= 0) return undefined
@@ -131,7 +134,10 @@ export function DensityViewer({
         <directionalLight position={[10, 10, 10]} intensity={0.8} />
         <directionalLight position={[-5, -5, 5]} intensity={0.4} />
 
-        <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+        {useGpuVolume
+          ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+          : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+        }
         <CrystalStructure volume={volume} showAtoms={showAtoms} showAtomLabels={showAtomLabels} showAbcCell={showAbcCell} showXyzBox={showXyzBox} dashedLines={dashedLines} lineWidth={lineWidth} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
         {showSlice && sliceAxis !== undefined && sliceIndex !== undefined && (
           <SlicePlane3D lattice={volume.lattice} axis={sliceAxis} sliceIndex={sliceIndex} dims={volume.grid.dims} data={volume.grid.data} padding={tilePadding} fade={tileFade} />

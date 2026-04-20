@@ -53,6 +53,26 @@ function computeDefaultIsoLevel(data: Float32Array): number {
   return mean + 2 * sigma
 }
 
+/**
+ * Compute a sorted quantile lookup for `data`. Returns an array of length
+ * `nQuantiles` where index i corresponds to quantile i/(nQuantiles-1).
+ * Uses a random subsample (up to ~sampleCap points) for speed on large grids.
+ */
+function computeDensityQuantiles(data: Float32Array, nQuantiles = 201, sampleCap = 50000): Float32Array {
+  const n = data.length
+  const stride = Math.max(1, Math.floor(n / sampleCap))
+  const samples: number[] = []
+  for (let i = 0; i < n; i += stride) samples.push(data[i])
+  samples.sort((a, b) => a - b)
+  const qs = new Float32Array(nQuantiles)
+  const m = samples.length
+  for (let i = 0; i < nQuantiles; i++) {
+    const idx = Math.min(m - 1, Math.round((i / (nQuantiles - 1)) * (m - 1)))
+    qs[i] = samples[idx]
+  }
+  return qs
+}
+
 // Bool param defaulting to true (present in URL = disabled)
 const boolTrueParam: Param<boolean> = {
   encode: (v) => v ? undefined : '',
@@ -162,6 +182,7 @@ export default function App() {
   const [files, setFiles] = useState<LoadedFile[]>([])
   const [isoLevel, setIsoLevel] = useUrlState('iso', optFloatParam({ encoding: 'string', decimals: 1 }), { debounce: 300 })
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
+  const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
   const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
   const [showXyzBox, setShowXyzBox] = useUrlState('xb', boolParam)
@@ -439,6 +460,14 @@ export default function App() {
     group: 'View',
     defaultBindings: ['f'],
     handler: () => setTileFade(tileFade > 0 ? 0 : 1),
+  })
+  useAction('view:toggle-gpu-volume', {
+    label: 'Toggle GPU volume rendering',
+    description: 'Switch between CPU marching cubes and GPU ray marching',
+    keywords: ['volume', 'raymarching', 'isosurface', 'performance'],
+    group: 'View',
+    defaultBindings: ['v'],
+    handler: () => setUseGpuVolume(!useGpuVolume),
   })
   useActionPair('iso:step', {
     label: 'Decrease / increase iso level',
@@ -1080,6 +1109,11 @@ export default function App() {
     return computeDefaultIsoLevel(primaryFile.data.grid.data)
   }, [primaryFile])
 
+  const densityQuantiles = useMemo(() => {
+    if (!primaryFile) return null
+    return computeDensityQuantiles(primaryFile.data.grid.data)
+  }, [primaryFile])
+
   const effectiveIsoLevel = useMemo(
     () => Math.max(0, Math.min(isoLevel ?? defaultIsoLevel, maxDensity)),
     [isoLevel, defaultIsoLevel, maxDensity],
@@ -1180,6 +1214,7 @@ export default function App() {
                   tileFade={tileFade}
                   abcIsXyz={abcIsXyz}
                   sliceStepSignRef={sliceStepSignRef}
+                  useGpuVolume={useGpuVolume}
                 />
               )}
               {showSlice && (() => {
@@ -1265,6 +1300,7 @@ export default function App() {
               isoLevel={effectiveIsoLevel}
               defaultIsoLevel={defaultIsoLevel}
               maxDensity={maxDensity}
+              densityQuantiles={densityQuantiles}
               onIsoLevelChange={setIsoLevel}
               opacity={opacity}
               onOpacityChange={setOpacity}
