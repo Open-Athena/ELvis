@@ -16,6 +16,8 @@ interface VolumeRendererProps {
   tiles?: TileInfo[]
   tilePadding?: number
   tileFade?: number
+  /** Surface color as RGB in [0, 1]. Defaults to `#44aaff`-ish if omitted. */
+  color?: [number, number, number]
 }
 
 /** Build a BufferGeometry for the unit cell parallelepiped (6 faces, 12 triangles). */
@@ -82,6 +84,7 @@ uniform vec3 uCameraPos;
 uniform vec2 uResolution;
 uniform float uPadding;
 uniform float uFade;
+uniform vec3 uColor;
 
 varying vec3 vWorldPos;
 
@@ -184,8 +187,7 @@ void main() {
   vec3 halfDir = normalize(lightDir + viewDir);
   float specular = pow(max(dot(worldNormal, halfDir), 0.0), 40.0);
 
-  vec3 color = vec3(0.27, 0.67, 1.0); // #44aaff-ish
-  vec3 lit = color * (ambient + 0.6 * diffuse) + vec3(0.3) * specular;
+  vec3 lit = uColor * (ambient + 0.6 * diffuse) + vec3(0.3) * specular;
 
   // Fade for tiling
   float alpha = uOpacity;
@@ -200,8 +202,10 @@ void main() {
 }
 `
 
+const DEFAULT_COLOR: [number, number, number] = [0.27, 0.67, 1.0]
+
 export function VolumeRenderer({
-  volume, isoLevel, opacity, tiles: _tiles, tilePadding = 0, tileFade = 1,
+  volume, isoLevel, opacity, tiles: _tiles, tilePadding = 0, tileFade = 1, color,
 }: VolumeRendererProps) {
   const { camera, size } = useThree()
   const matRef = useRef<ShaderMaterial>(null)
@@ -265,6 +269,7 @@ export function VolumeRenderer({
     uResolution: { value: new Vector2(size.width, size.height) },
     uPadding: { value: tilePadding },
     uFade: { value: tileFade },
+    uColor: { value: new Vector3(...(color ?? DEFAULT_COLOR)) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [texture])  // only rebuild when texture (volume) changes
 
@@ -281,6 +286,8 @@ export function VolumeRenderer({
     mat.uniforms.uResolution.value.set(size.width, size.height)
     mat.uniforms.uCartToFrac.value.copy(cartToFrac)
     mat.uniforms.uVolume.value = texture
+    const c = color ?? DEFAULT_COLOR
+    mat.uniforms.uColor.value.set(c[0], c[1], c[2])
   })
 
   return (

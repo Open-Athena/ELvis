@@ -16,6 +16,9 @@ import {
   parsePymatgenChgcar,
   useSettings,
   fracToCart,
+  sampleRamp,
+  densityToQuantile,
+  DEFAULT_RAMP,
 } from '@elvis/core'
 import { ShortcutsModal, Omnibar, SequenceModal, LookupModal, SpeedDial, ModeIndicator, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
 import type { SpeedDialAction } from 'use-kbd'
@@ -183,6 +186,7 @@ export default function App() {
   const [isoLevel, setIsoLevel] = useUrlState('iso', optFloatParam({ encoding: 'string', decimals: 1 }), { debounce: 300 })
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
   const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
+  const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
   const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
   const [showXyzBox, setShowXyzBox] = useUrlState('xb', boolParam)
@@ -468,6 +472,14 @@ export default function App() {
     group: 'View',
     defaultBindings: ['v'],
     handler: () => setUseGpuVolume(!useGpuVolume),
+  })
+  useAction('view:toggle-color-by-density', {
+    label: 'Toggle iso color by density',
+    description: 'Color/opacity of isosurface varies with iso-level quantile',
+    keywords: ['color', 'hue', 'density', 'ramp', 'gradient'],
+    group: 'View',
+    defaultBindings: ['shift+c'],
+    handler: () => setColorByDensity(!colorByDensity),
   })
   useActionPair('iso:step', {
     label: 'Decrease / increase iso level',
@@ -1119,6 +1131,12 @@ export default function App() {
     [isoLevel, defaultIsoLevel, maxDensity],
   )
 
+  const sampledColor = useMemo(() => {
+    if (!colorByDensity || !densityQuantiles) return null
+    const q = densityToQuantile(effectiveIsoLevel, densityQuantiles)
+    return sampleRamp(DEFAULT_RAMP, q)
+  }, [colorByDensity, densityQuantiles, effectiveIsoLevel])
+
   // Clamp isoLevel URL param when density range changes (e.g. new material)
   useEffect(() => {
     if (isoLevel !== null && primaryFile && isoLevel > maxDensity) {
@@ -1215,6 +1233,8 @@ export default function App() {
                   abcIsXyz={abcIsXyz}
                   sliceStepSignRef={sliceStepSignRef}
                   useGpuVolume={useGpuVolume}
+                  surfaceColor={sampledColor?.color ?? null}
+                  surfaceOpacityOverride={sampledColor?.opacity ?? null}
                 />
               )}
               {showSlice && (() => {

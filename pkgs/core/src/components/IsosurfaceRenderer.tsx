@@ -11,9 +11,16 @@ interface IsosurfaceRendererProps {
   tiles?: TileInfo[]
   tilePadding?: number
   tileFade?: number
+  /** Surface color as RGB in [0, 1]. Defaults to `#44aaff` if omitted. */
+  color?: [number, number, number]
 }
 
-export function IsosurfaceRenderer({ volume, isoLevel, opacity, tiles, tilePadding = 0, tileFade = 1 }: IsosurfaceRendererProps) {
+function rgbToHex(c: [number, number, number]): string {
+  const to = (x: number) => Math.max(0, Math.min(255, Math.round(x * 255))).toString(16).padStart(2, '0')
+  return `#${to(c[0])}${to(c[1])}${to(c[2])}`
+}
+
+export function IsosurfaceRenderer({ volume, isoLevel, opacity, tiles, tilePadding = 0, tileFade = 1, color }: IsosurfaceRendererProps) {
   const extended = useMemo(
     () => extendPeriodicGrid(volume.grid.data, volume.grid.dims),
     [volume],
@@ -46,7 +53,7 @@ export function IsosurfaceRenderer({ volume, isoLevel, opacity, tiles, tilePaddi
           <mesh key={i} geometry={geometry} position={tile.cartOffset}>
             <meshStandardMaterial
               key={`iso-${tilePadding}-${tileFade}`}
-              color="#44aaff"
+              color={color ? rgbToHex(color) : '#44aaff'}
               transparent
               opacity={opacity}
               side={2 /* DoubleSide */}

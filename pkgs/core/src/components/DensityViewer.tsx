@@ -67,6 +67,9 @@ interface DensityViewerProps {
   abcIsXyz?: boolean
   sliceStepSignRef?: MutableRefObject<number>
   useGpuVolume?: boolean
+  /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
+  surfaceColor?: [number, number, number] | null
+  surfaceOpacityOverride?: number | null
 }
 
 export function DensityViewer({
@@ -94,6 +97,8 @@ export function DensityViewer({
   abcIsXyz,
   sliceStepSignRef,
   useGpuVolume,
+  surfaceColor,
+  surfaceOpacityOverride,
 }: DensityViewerProps) {
   const tiles = useMemo(() => {
     if (tilePadding <= 0) return undefined
@@ -135,8 +140,8 @@ export function DensityViewer({
         <directionalLight position={[-5, -5, 5]} intensity={0.4} />
 
         {useGpuVolume
-          ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
-          : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+          ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
+          : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
         }
         <CrystalStructure volume={volume} showAtoms={showAtoms} showAtomLabels={showAtomLabels} showAbcCell={showAbcCell} showXyzBox={showXyzBox} dashedLines={dashedLines} lineWidth={lineWidth} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
         {showSlice && sliceAxis !== undefined && sliceIndex !== undefined && (
