@@ -195,6 +195,7 @@ export default function App() {
   const [isoLevel, setIsoLevel] = useUrlState('iso', optFloatParam({ encoding: 'string', decimals: 1 }), { debounce: 300 })
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
   const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
+  const [useGlbPreview, setUseGlbPreview] = useUrlState('glb', boolParam)
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
   const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
@@ -481,6 +482,14 @@ export default function App() {
     group: 'View',
     defaultBindings: ['v'],
     handler: () => setUseGpuVolume(!useGpuVolume),
+  })
+  useAction('view:toggle-glb-preview', {
+    label: 'Toggle GLB mesh preview',
+    description: 'Load pre-computed GLB isosurface (instant, no CPU/GPU marching)',
+    keywords: ['glb', 'mesh', 'preview', 'fast', 'isosurface'],
+    group: 'View',
+    defaultBindings: ['shift+g'],
+    handler: () => setUseGlbPreview(!useGlbPreview),
   })
   useAction('view:toggle-color-by-density', {
     label: 'Toggle iso color by density',
@@ -1183,6 +1192,24 @@ export default function App() {
     return sampleRamp(DEFAULT_RAMP, q)
   }, [colorByDensity, densityQuantiles, effectiveIsoLevel])
 
+  /** Quantiles that have pre-computed GLB previews on the server. */
+  const GLB_QUANTILES: number[] = [0.50, 0.75, 0.90, 0.95, 0.99]
+
+  const glbUrl = useMemo(() => {
+    if (!useGlbPreview || !materialId || !densityQuantiles) return null
+    const taskId = extractMpId(materialId)
+    if (!taskId) return null
+    const q = densityToQuantile(effectiveIsoLevel, densityQuantiles)
+    // Snap to the nearest pre-computed quantile.
+    let best = GLB_QUANTILES[0]
+    let bestDiff = Math.abs(q - best)
+    for (const cand of GLB_QUANTILES) {
+      const diff = Math.abs(q - cand)
+      if (diff < bestDiff) { best = cand; bestDiff = diff }
+    }
+    return `/glb/${taskId}/${best.toFixed(2)}.glb`
+  }, [useGlbPreview, materialId, densityQuantiles, effectiveIsoLevel])
+
   // Clamp isoLevel URL param when density range changes (e.g. new material)
   useEffect(() => {
     if (isoLevel !== null && primaryFile && isoLevel > maxDensity) {
@@ -1279,6 +1306,7 @@ export default function App() {
                   abcIsXyz={abcIsXyz}
                   sliceStepSignRef={sliceStepSignRef}
                   useGpuVolume={useGpuVolume}
+                  glbUrl={glbUrl}
                   surfaceColor={sampledColor?.color ?? null}
                   surfaceOpacityOverride={sampledColor?.opacity ?? null}
                 />
