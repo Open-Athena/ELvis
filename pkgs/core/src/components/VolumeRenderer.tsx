@@ -179,7 +179,8 @@ void main() {
   // But simpler: just use the fracNormal direction in world space via the inverse transform
   vec3 worldNormal = normalize((inverse(uCartToFrac) * vec4(fracNormal, 0.0)).xyz);
 
-  // Lighting (Blinn-Phong)
+  // Blinn-Phong lighting (single directional + ambient). Matching the
+  // scene's three-light rig and getting CPU parity is follow-up work.
   vec3 lightDir = normalize(vec3(0.5, 1.0, 0.8));
   float diffuse = max(dot(worldNormal, lightDir), 0.0);
   float ambient = 0.3;

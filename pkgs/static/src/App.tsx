@@ -42,6 +42,15 @@ interface LoadedFile {
   filename: string
 }
 
+const DEFAULT_ISO_QUANTILE = 0.95
+
+function computeDefaultIsoFromQuantiles(qs: Float32Array): number {
+  // Quantiles array is sorted; index maps linearly to quantile.
+  const idx = Math.round(DEFAULT_ISO_QUANTILE * (qs.length - 1))
+  return qs[idx]
+}
+
+/** Fallback default when quantile table isn't available (early load). */
 function computeDefaultIsoLevel(data: Float32Array): number {
   let sum = 0
   let sumSq = 0
@@ -480,6 +489,40 @@ export default function App() {
     group: 'View',
     defaultBindings: ['shift+c'],
     handler: () => setColorByDensity(!colorByDensity),
+  })
+  const densityQuantilesRef = useRef<Float32Array | null>(null)
+  const isoSweepRaf = useRef<number | null>(null)
+  useAction('iso:sweep', {
+    label: 'Sweep iso level',
+    description: 'Animate iso from low to high density over ~4s (re-press to cancel)',
+    keywords: ['iso', 'animation', 'sweep', 'density', 'quantile'],
+    group: 'Surface',
+    defaultBindings: ['shift+i'],
+    handler: () => {
+      if (isoSweepRaf.current !== null) {
+        cancelAnimationFrame(isoSweepRaf.current)
+        isoSweepRaf.current = null
+        return
+      }
+      const qs = densityQuantilesRef.current
+      if (!qs) return
+      const durationMs = 4000
+      const t0 = performance.now()
+      const tick = (now: number) => {
+        const elapsed = now - t0
+        const t = elapsed / durationMs
+        if (t >= 1) {
+          setIsoLevel(qs[qs.length - 1])
+          isoSweepRaf.current = null
+          return
+        }
+        const eased = 0.5 - 0.5 * Math.cos(Math.PI * t)
+        const idx = Math.round(eased * (qs.length - 1))
+        setIsoLevel(qs[idx])
+        isoSweepRaf.current = requestAnimationFrame(tick)
+      }
+      isoSweepRaf.current = requestAnimationFrame(tick)
+    },
   })
   useActionPair('iso:step', {
     label: 'Decrease / increase iso level',
@@ -1116,15 +1159,18 @@ export default function App() {
     return max
   }, [primaryFile])
 
-  const defaultIsoLevel = useMemo(() => {
-    if (!primaryFile) return 0
-    return computeDefaultIsoLevel(primaryFile.data.grid.data)
-  }, [primaryFile])
-
   const densityQuantiles = useMemo(() => {
     if (!primaryFile) return null
     return computeDensityQuantiles(primaryFile.data.grid.data)
   }, [primaryFile])
+  densityQuantilesRef.current = densityQuantiles
+
+  const defaultIsoLevel = useMemo(() => {
+    if (!primaryFile) return 0
+    return densityQuantiles
+      ? computeDefaultIsoFromQuantiles(densityQuantiles)
+      : computeDefaultIsoLevel(primaryFile.data.grid.data)
+  }, [primaryFile, densityQuantiles])
 
   const effectiveIsoLevel = useMemo(
     () => Math.max(0, Math.min(isoLevel ?? defaultIsoLevel, maxDensity)),

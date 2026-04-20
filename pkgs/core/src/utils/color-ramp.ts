@@ -13,12 +13,18 @@ export interface ColorStop {
   opacity: number
 }
 
-/** Default ramp: diffuse cool → dense hot, mimicking a "charge temperature". */
+/**
+ * Default ramp: a viridis-like perceptual sequence. Low-quantile (diffuse)
+ * iso surfaces appear purple/blue with low opacity; high-quantile (tight
+ * atomic-core) surfaces appear yellow-green with higher opacity. Viridis is
+ * perceptually uniform and colorblind-friendly.
+ */
 export const DEFAULT_RAMP: ColorStop[] = [
-  { q: 0.0, color: [0.15, 0.25, 0.85], opacity: 0.25 },
-  { q: 0.5, color: [0.20, 0.70, 0.95], opacity: 0.50 },
-  { q: 0.9, color: [0.95, 0.80, 0.30], opacity: 0.75 },
-  { q: 1.0, color: [1.00, 0.40, 0.25], opacity: 0.90 },
+  { q: 0.0, color: [0.267, 0.004, 0.329], opacity: 0.22 }, // dark purple
+  { q: 0.25, color: [0.229, 0.322, 0.546], opacity: 0.38 }, // blue
+  { q: 0.5, color: [0.128, 0.567, 0.551], opacity: 0.55 }, // teal
+  { q: 0.75, color: [0.369, 0.788, 0.383], opacity: 0.72 }, // green
+  { q: 1.0, color: [0.993, 0.906, 0.144], opacity: 0.88 }, // yellow
 ]
 
 export interface SampledColor {
@@ -47,6 +53,17 @@ export function sampleRamp(stops: ColorStop[], q: number): SampledColor {
     }
   }
   return { color: last.color, opacity: last.opacity }
+}
+
+/** Linear interpolation in a sorted quantile array, q ∈ [0, 1] → density. */
+export function quantileToDensity(q: number, qs: Float32Array): number {
+  const n = qs.length
+  if (q <= 0) return qs[0]
+  if (q >= 1) return qs[n - 1]
+  const pos = q * (n - 1)
+  const i = Math.floor(pos)
+  const frac = pos - i
+  return qs[i] * (1 - frac) + qs[Math.min(n - 1, i + 1)] * frac
 }
 
 /**

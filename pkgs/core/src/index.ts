@@ -19,7 +19,7 @@ export { parsePymatgenChgcar } from './parsers/pymatgen-chgcar.ts'
 // Utils
 export { marchingCubes, extendPeriodicGrid } from './utils/marching-cubes.ts'
 export { fracToCart, latticeToMatrix4, cellVolume, unitCellEdges, unitCellBoundingBox } from './utils/lattice.ts'
-export { sampleRamp, densityToQuantile, DEFAULT_RAMP } from './utils/color-ramp.ts'
+export { sampleRamp, densityToQuantile, quantileToDensity, DEFAULT_RAMP } from './utils/color-ramp.ts'
 export type { ColorStop, SampledColor } from './utils/color-ramp.ts'
 export { computeTiles, atomOpacity, distFromPrimaryCell } from './utils/tiling.ts'
 export type { TileInfo } from './utils/tiling.ts'

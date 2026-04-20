@@ -1,4 +1,5 @@
 import { getElement } from '../utils/elements.ts'
+import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
 import styles from './Controls.module.css'
 
 const ResetIcon = () => (
@@ -76,34 +77,6 @@ function tickToPadding(t: number): number {
 function fmtAngle(n: number): string {
   const s = n.toFixed(1)
   return s.endsWith('.0') ? s.slice(0, -2) : s
-}
-
-/** Convert a density value to its quantile position in [0, 1] via binary search. */
-function densityToQuantile(v: number, qs: Float32Array): number {
-  let lo = 0, hi = qs.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    if (qs[mid] < v) lo = mid + 1
-    else hi = mid
-  }
-  // Refine between adjacent quantiles for smooth inverse
-  if (lo > 0 && qs[lo] > v) {
-    const span = qs[lo] - qs[lo - 1]
-    const frac = span > 0 ? (v - qs[lo - 1]) / span : 0
-    return (lo - 1 + frac) / (qs.length - 1)
-  }
-  return lo / (qs.length - 1)
-}
-
-/** Convert a quantile position in [0, 1] to a density value via linear interp. */
-function quantileToDensity(q: number, qs: Float32Array): number {
-  const n = qs.length
-  if (q <= 0) return qs[0]
-  if (q >= 1) return qs[n - 1]
-  const pos = q * (n - 1)
-  const i = Math.floor(pos)
-  const frac = pos - i
-  return qs[i] * (1 - frac) + qs[Math.min(n - 1, i + 1)] * frac
 }
 
 export function Controls({
