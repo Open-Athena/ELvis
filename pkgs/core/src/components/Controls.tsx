@@ -12,6 +12,8 @@ interface ControlsProps {
   isoLevel: number
   defaultIsoLevel: number
   maxDensity: number
+  /** Sorted density quantiles: index i = quantile i/(length-1). Enables non-linear slider scaling. */
+  densityQuantiles?: Float32Array | null
   onIsoLevelChange: (v: number) => void
   opacity: number
   onOpacityChange: (v: number) => void
@@ -76,10 +78,39 @@ function fmtAngle(n: number): string {
   return s.endsWith('.0') ? s.slice(0, -2) : s
 }
 
+/** Convert a density value to its quantile position in [0, 1] via binary search. */
+function densityToQuantile(v: number, qs: Float32Array): number {
+  let lo = 0, hi = qs.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (qs[mid] < v) lo = mid + 1
+    else hi = mid
+  }
+  // Refine between adjacent quantiles for smooth inverse
+  if (lo > 0 && qs[lo] > v) {
+    const span = qs[lo] - qs[lo - 1]
+    const frac = span > 0 ? (v - qs[lo - 1]) / span : 0
+    return (lo - 1 + frac) / (qs.length - 1)
+  }
+  return lo / (qs.length - 1)
+}
+
+/** Convert a quantile position in [0, 1] to a density value via linear interp. */
+function quantileToDensity(q: number, qs: Float32Array): number {
+  const n = qs.length
+  if (q <= 0) return qs[0]
+  if (q >= 1) return qs[n - 1]
+  const pos = q * (n - 1)
+  const i = Math.floor(pos)
+  const frac = pos - i
+  return qs[i] * (1 - frac) + qs[Math.min(n - 1, i + 1)] * frac
+}
+
 export function Controls({
   isoLevel,
   defaultIsoLevel,
   maxDensity,
+  densityQuantiles,
   onIsoLevelChange,
   opacity,
   onOpacityChange,
@@ -159,7 +190,14 @@ export function Controls({
         <div className={styles.sectionBody}>
           <div className={styles.controlLabel}>
             <div className={styles.sliderHeader}>
-              <span>Iso-level: {isoLevel.toFixed(1)}</span>
+              <span>
+                Iso: {isoLevel.toFixed(1)}
+                {densityQuantiles && (
+                  <span style={{ opacity: 0.6, marginLeft: 6 }}>
+                    ({(densityToQuantile(isoLevel, densityQuantiles) * 100).toFixed(1)}%)
+                  </span>
+                )}
+              </span>
               <button
                 className={styles.resetBtn}
                 onClick={() => onIsoLevelChange(defaultIsoLevel)}
@@ -169,15 +207,27 @@ export function Controls({
                 <ResetIcon />
               </button>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={maxDensity}
-              step={maxDensity / 500}
-              value={isoLevel}
-              onChange={e => onIsoLevelChange(parseFloat(e.target.value))}
-              className={styles.slider}
-            />
+            {densityQuantiles ? (
+              <input
+                type="range"
+                min={0}
+                max={1000}
+                step={1}
+                value={Math.round(densityToQuantile(isoLevel, densityQuantiles) * 1000)}
+                onChange={e => onIsoLevelChange(quantileToDensity(parseInt(e.target.value) / 1000, densityQuantiles))}
+                className={styles.slider}
+              />
+            ) : (
+              <input
+                type="range"
+                min={0}
+                max={maxDensity}
+                step={maxDensity / 500}
+                value={isoLevel}
+                onChange={e => onIsoLevelChange(parseFloat(e.target.value))}
+                className={styles.slider}
+              />
+            )}
           </div>
 
           <div className={styles.controlLabel}>
