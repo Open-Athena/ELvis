@@ -19,71 +19,25 @@ Usage:
   convert-to-zarr.py path/to/mp-XXX.CHGCAR [--s3 s3://bucket/prefix/]
 
   Writes:
-    <out_dir>/<material_id>.zarr/
-      .zgroup
-      .zattrs               # multiscales + lattice + atoms + density stats + quantile table
-      0/  .zarray  chunks/  # full resolution
-      1/  .zarray  chunks/  # 2x downsampled
-      2/  ...               # 4x
-      3/  ...               # 8x
+    <out_dir>/<material_id>-<role>.zarr/
 
 The lattice is non-orthogonal in general; OME-NGFF coordinate transforms
 assume orthogonal axes, so we put the full 3x3 lattice matrix and the atom
-list in a custom `elvis` metadata namespace. Other Zarr-aware tools can still
-open the pyramid via `multiscales`; only ELvis uses the lattice for rendering.
+list in a custom `elvis` metadata namespace.
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from functools import partial
 from pathlib import Path
 
 import click
-import numpy as np
-import zarr
-from numcodecs import Zstd
-from pymatgen.io.vasp import Chgcar
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _zarr_lib import convert_chgcar  # noqa: E402
 
 err = partial(print, file=sys.stderr)
-
-
-def downsample_2x(arr: np.ndarray) -> np.ndarray:
-    """Block-mean downsample by 2 in each dim. Crops trailing odd voxel."""
-    nx, ny, nz = arr.shape
-    nx2, ny2, nz2 = nx - (nx % 2), ny - (ny % 2), nz - (nz % 2)
-    cropped = arr[:nx2, :ny2, :nz2]
-    return cropped.reshape(nx2 // 2, 2, ny2 // 2, 2, nz2 // 2, 2).mean(axis=(1, 3, 5))
-
-
-def build_pyramid(grid: np.ndarray, n_levels: int) -> list[np.ndarray]:
-    """Return [level0, level1, ...]; each level is 2x downsampled from the previous."""
-    levels = [grid]
-    for _ in range(n_levels - 1):
-        nxt = downsample_2x(levels[-1])
-        if min(nxt.shape) < 2:
-            break
-        levels.append(nxt)
-    return levels
-
-
-def chunk_shape(grid_shape: tuple[int, ...], target: int = 32) -> tuple[int, ...]:
-    """Chunk = min(target, dim) per axis; small grids get a single chunk."""
-    return tuple(min(target, d) for d in grid_shape)
-
-
-def compute_quantile_table(grid: np.ndarray, n: int = 201, sample_cap: int = 50_000) -> np.ndarray:
-    """Match the client-side quantile table: n equally-spaced quantiles from a
-    random subsample, used to map iso-slider position [0..1] to density."""
-    flat = grid.ravel()
-    if flat.size > sample_cap:
-        rng = np.random.default_rng(0)
-        sample = rng.choice(flat, size=sample_cap, replace=False)
-    else:
-        sample = flat
-    qs = np.linspace(0, 1, n)
-    return np.quantile(sample, qs).astype(np.float32)
 
 
 @click.command()
@@ -103,85 +57,16 @@ def main(chgcar_path: Path, out_dir: Path, chunk: int, levels: int, s3_prefix: s
 
     if role == 'auto':
         parts = {p.lower() for p in chgcar_path.parts}
-        if 'input' in parts or 'data' in parts:
-            role = 'input'
-        else:
-            role = 'label'
+        role = 'input' if ('input' in parts or 'data' in parts) else 'label'
 
     err(f'[{mat_id}/{role}] loading {chgcar_path}')
-    chg = Chgcar.from_file(str(chgcar_path))
-    grid = np.asarray(chg.data['total'], dtype=np.float32)
-    lattice = np.asarray(chg.structure.lattice.matrix, dtype=np.float64)
-    err(f'[{mat_id}/{role}] grid {grid.shape}, '
-        f'min={grid.min():.4f}, max={grid.max():.4f}, mean={grid.mean():.4f}, '
-        f'lattice volume={chg.structure.lattice.volume:.2f} A^3')
-
-    pyramid = build_pyramid(grid, levels)
-    err(f'[{mat_id}/{role}] pyramid: {[lvl.shape for lvl in pyramid]}')
-
     out_path = out_dir / f'{mat_id}-{role}.zarr'
-    if out_path.exists():
-        if not force:
-            raise click.ClickException(f'{out_path} exists; pass --force to overwrite')
-        import shutil
-        shutil.rmtree(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    store = zarr.DirectoryStore(str(out_path))
-    root = zarr.group(store=store, overwrite=True)
-    compressor = Zstd(level=5)
-
-    datasets_meta = []
-    for i, lvl in enumerate(pyramid):
-        chunks = chunk_shape(lvl.shape, target=chunk)
-        z = root.create_dataset(
-            str(i), shape=lvl.shape, chunks=chunks, dtype='float32',
-            compressor=compressor, overwrite=True,
-        )
-        z[:] = lvl
-        # Each level is 2^i times coarser; OME-NGFF scale is in source-coordinate units
-        scale = float(2 ** i)
-        datasets_meta.append({
-            'path': str(i),
-            'coordinateTransformations': [{'type': 'scale', 'scale': [scale, scale, scale]}],
-        })
-
-    atoms = [
-        {
-            'element': site.specie.symbol,
-            'frac': [float(x) for x in site.frac_coords],
-        }
-        for site in chg.structure.sites
-    ]
-    quantiles = compute_quantile_table(grid)
-
-    root.attrs.put({
-        'multiscales': [{
-            'version': '0.4',
-            'name': 'density',
-            'axes': [
-                {'name': 'a', 'type': 'space'},
-                {'name': 'b', 'type': 'space'},
-                {'name': 'c', 'type': 'space'},
-            ],
-            'datasets': datasets_meta,
-        }],
-        'elvis': {
-            'material_id': mat_id,
-            'role': role,
-            'lattice': lattice.tolist(),
-            'atoms': atoms,
-            'stats': {
-                'min': float(grid.min()),
-                'max': float(grid.max()),
-                'mean': float(grid.mean()),
-            },
-            'quantiles': quantiles.tolist(),
-        },
-    })
-
-    total_bytes = sum(p.stat().st_size for p in out_path.rglob('*') if p.is_file())
-    err(f'[{mat_id}/{role}] wrote {out_path} ({total_bytes / 1024:.1f} KB total)')
+    info = convert_chgcar(chgcar_path, out_path, mat_id, role, chunk=chunk, levels=levels, overwrite=force)
+    err(f'[{mat_id}/{role}] grid {tuple(info["shape"])}, '
+        f'min={info["min"]:.4f}, max={info["max"]:.4f}, mean={info["mean"]:.4f}, '
+        f'volume={info["lattice_volume"]:.2f} A^3')
+    err(f'[{mat_id}/{role}] pyramid: {info["pyramid_shapes"]}')
+    err(f'[{mat_id}/{role}] wrote {out_path} ({info["total_bytes"] / 1024:.1f} KB total)')
 
     if s3_prefix:
         upload_to_s3(out_path, s3_prefix, mat_id, role)
