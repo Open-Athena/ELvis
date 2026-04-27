@@ -9,6 +9,13 @@ export type {
 
 // Storage
 export type { StoredVolume, VolumeStore } from './storage/types.ts'
+export {
+  openZarrVolume,
+  readZarrLevel,
+  zarrToVolumeData,
+  fetchZarrVolume,
+} from './storage/zarr-volume.ts'
+export type { OpenedZarrVolume, ZarrVolumeMetadata } from './storage/zarr-volume.ts'
 
 // Parsers
 export { parseCHGCAR, parseCHGCARHeader } from './parsers/chgcar.ts'

@@ -19,6 +19,7 @@ import {
   sampleRamp,
   densityToQuantile,
   DEFAULT_RAMP,
+  fetchZarrVolume,
 } from '@elvis/core'
 import { ShortcutsModal, Omnibar, SequenceModal, LookupModal, SpeedDial, ModeIndicator, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
 import type { SpeedDialAction } from 'use-kbd'
@@ -196,6 +197,7 @@ export default function App() {
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
   const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
   const [useGlbPreview, setUseGlbPreview] = useUrlState('glb', boolParam)
+  const [useZarr, setUseZarr] = useUrlState('zarr', boolParam)
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
   const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
@@ -490,6 +492,14 @@ export default function App() {
     group: 'View',
     defaultBindings: ['shift+g'],
     handler: () => setUseGlbPreview(!useGlbPreview),
+  })
+  useAction('data:toggle-zarr', {
+    label: 'Toggle Zarr loader',
+    description: 'Fetch density from multi-resolution Zarr instead of full CHGCAR',
+    keywords: ['zarr', 'progressive', 'pyramid', 'chunks'],
+    group: 'Data',
+    defaultBindings: ['shift+z'],
+    handler: () => setUseZarr(!useZarr),
   })
   useAction('view:toggle-color-by-density', {
     label: 'Toggle iso color by density',
@@ -1070,6 +1080,17 @@ export default function App() {
     setFiles([])
     try {
       const isJsonGz = url.toLowerCase().endsWith('.json.gz')
+      const isZarr = /\.zarr\/?$/i.test(url)
+
+      if (isZarr) {
+        const httpsUrl = url.startsWith('s3://') ? s3UriToHttps(url) : url
+        setFetchStatus('Loading Zarr...')
+        const data = await fetchZarrVolume(httpsUrl)
+        const filename = data.title
+        handleLoad(data, filename)
+        setFetchStatus(null)
+        return
+      }
 
       const onProgress = (p: FetchProgress) => {
         if (p.phase === 'head') setFetchStatus('Checking file...')
@@ -1481,8 +1502,8 @@ export default function App() {
       />
 
       <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
-      <MaterialsSearch onSelect={handleUrlSubmit} />
-      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} />
+      <MaterialsSearch onSelect={handleUrlSubmit} format={useZarr ? 'zarr' : 'chgcar'} />
+      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} format={useZarr ? 'zarr' : 'chgcar'} />
       <Omnibar />
       <SequenceModal />
       <LookupModal />

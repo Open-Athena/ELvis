@@ -23,9 +23,11 @@ function formatDescription(record: MaterialRecord): string {
 interface MaterialsSearchProps {
   /** Called with the resolved S3 URL for loading the selected material. */
   onSelect: (url: string) => void
+  role?: 'label' | 'input'
+  format?: 'chgcar' | 'zarr'
 }
 
-export function MaterialsSearch({ onSelect }: MaterialsSearchProps) {
+export function MaterialsSearch({ onSelect, role = 'label', format = 'chgcar' }: MaterialsSearchProps) {
   const config = useMemo(() => ({
     group: 'Materials',
     minQueryLength: 1,
@@ -36,7 +38,7 @@ export function MaterialsSearch({ onSelect }: MaterialsSearchProps) {
       const page = hits.slice(pagination.offset, pagination.offset + pagination.limit)
       return {
         entries: page.map(r => {
-          const url = resolveLoadUrl(r)
+          const url = resolveLoadUrl(r, role, format)
           return {
             id: r.id,
             label: `${r.id}  ${r.formula}`,
@@ -49,7 +51,7 @@ export function MaterialsSearch({ onSelect }: MaterialsSearchProps) {
         hasMore: pagination.offset + pagination.limit < hits.length,
       }
     },
-  }), [onSelect])
+  }), [onSelect, role, format])
 
   useOmnibarEndpoint('materials', config)
 

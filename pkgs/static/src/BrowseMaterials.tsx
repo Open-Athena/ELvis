@@ -25,9 +25,11 @@ interface BrowseMaterialsProps {
   open: boolean
   onClose: () => void
   onSelect: (url: string) => void
+  role?: 'label' | 'input'
+  format?: 'chgcar' | 'zarr'
 }
 
-export function BrowseMaterials({ open, onClose, onSelect }: BrowseMaterialsProps) {
+export function BrowseMaterials({ open, onClose, onSelect, role = 'label', format = 'chgcar' }: BrowseMaterialsProps) {
   const [query, setQuery] = useState('')
   const [crystalSystem, setCrystalSystem] = useState<string>('')
   const [requireElements, setRequireElements] = useState('')
@@ -67,7 +69,7 @@ export function BrowseMaterials({ open, onClose, onSelect }: BrowseMaterialsProp
   }
 
   const handleRowClick = (r: MaterialRecord) => {
-    const url = resolveLoadUrl(r)
+    const url = resolveLoadUrl(r, role, format)
     if (!url) return
     onSelect(url)
     onClose()
