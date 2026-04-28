@@ -222,7 +222,8 @@ export default function App() {
   const [cam, setCam] = useUrlState('c', camParam)
   const [camTarget, setCamTarget] = useUrlState('ct', camTargetParam, { debounce: 500 })
   const [materialId, setMaterialId] = useUrlState('m', stringParam(DEFAULT_MP_ID), { push: true })
-  const [srcRole, setSrcRole] = useUrlState('src', stringParam('label')) as ['input' | 'label', (v: 'input' | 'label') => void]
+  type SrcRole = 'input' | 'label' | 'diff'
+  const [srcRole, setSrcRole] = useUrlState('src', stringParam('label')) as [SrcRole, (v: SrcRole) => void]
   const [currentVolumeId, setCurrentVolumeIdRaw] = useState<string | null>(
     () => sessionStorage.getItem('elvis-active-volume'),
   )
@@ -503,14 +504,14 @@ export default function App() {
     defaultBindings: ['shift+z'],
     handler: () => setUseZarr(!useZarr),
   })
-  useAction('data:toggle-src', {
-    label: 'Toggle SAD input vs DFT label',
-    description: 'Switch between SAD initial guess (input) and converged DFT (label) density',
-    keywords: ['input', 'label', 'sad', 'dft', 'source', 'role'],
+  useAction('data:cycle-src', {
+    label: 'Cycle source: label → input → diff',
+    description: 'Switch between DFT label, SAD input, and |label − input| difference',
+    keywords: ['input', 'label', 'diff', 'sad', 'dft', 'source', 'role'],
     group: 'Data',
     defaultBindings: ['i'],
     handler: () => {
-      const next: 'input' | 'label' = srcRole === 'input' ? 'label' : 'input'
+      const next: SrcRole = srcRole === 'label' ? 'input' : srcRole === 'input' ? 'diff' : 'label'
       setSrcRole(next)
       // The URL param `m` may be a material_id (mp-573119) OR a task_id (mp-1775579) —
       // ElectrAI S3 uses task IDs while the corpora manifest indexes by material ID.
@@ -518,7 +519,14 @@ export default function App() {
         r.id === materialId ||
         Object.values(r.datasets).some(d => d?.task_ids?.includes(materialId)),
       )
-      if (record) {
+      if (!record) return
+      if (next === 'diff') {
+        if (!useZarr) {
+          setFetchStatus('Diff view requires Zarr mode (Shift+Z)')
+          return
+        }
+        loadDiff(record)
+      } else {
         const url = resolveLoadUrl(record, next, useZarr ? 'zarr' : 'chgcar')
         if (url) handleUrlSubmit(url)
       }
@@ -1097,6 +1105,43 @@ export default function App() {
     setFetchStatus(null)
   }, [setCurrentVolumeId])
 
+  const loadDiff = useCallback(async (record: { id: string; datasets: Record<string, { task_ids: string[] } | undefined> }) => {
+    setUrlLoading(true)
+    setFiles([])
+    setFetchStatus('Loading input + label for diff...')
+    try {
+      const inputUrl = resolveLoadUrl(record, 'input', 'zarr')
+      const labelUrl = resolveLoadUrl(record, 'label', 'zarr')
+      if (!inputUrl || !labelUrl) {
+        setFetchStatus('Diff requires both input and label Zarr URLs')
+        return
+      }
+      const [inp, lbl] = await Promise.all([
+        fetchZarrVolume(s3UriToHttps(inputUrl)),
+        fetchZarrVolume(s3UriToHttps(labelUrl)),
+      ])
+      const dInp = inp.grid.dims, dLbl = lbl.grid.dims
+      if (dInp[0] !== dLbl[0] || dInp[1] !== dLbl[1] || dInp[2] !== dLbl[2]) {
+        setFetchStatus(`Diff dim mismatch: input ${dInp.join('×')} vs label ${dLbl.join('×')}`)
+        return
+      }
+      const n = lbl.grid.data.length
+      const data = new Float32Array(n)
+      for (let i = 0; i < n; i++) data[i] = Math.abs(lbl.grid.data[i] - inp.grid.data[i])
+      const diff: VolumeData = {
+        ...lbl,
+        title: `${record.id}/diff`,
+        grid: { dims: lbl.grid.dims, data },
+      }
+      handleLoad(diff, `${record.id}-diff`)
+      setFetchStatus(null)
+    } catch (e) {
+      setFetchStatus(`Diff failed: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setUrlLoading(false)
+    }
+  }, [handleLoad])
+
   const handleUrlSubmit = useCallback(async (url: string) => {
     setUrlLoading(true)
     setFetchStatus(null)
@@ -1327,7 +1372,7 @@ export default function App() {
                 />
               ) : (
                 <DensityViewer
-                  label={srcRole === 'input' ? 'Input (SAD)' : 'Label (DFT)'}
+                  label={srcRole === 'input' ? 'Input (SAD)' : srcRole === 'diff' ? '|Label − Input|' : 'Label (DFT)'}
                   volume={primaryFile.data}
                   isoLevel={effectiveIsoLevel}
                   opacity={opacity}
