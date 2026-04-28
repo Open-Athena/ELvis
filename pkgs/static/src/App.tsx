@@ -31,7 +31,8 @@ import { loadCredentials, saveCredentials } from './utils/aws-credentials.ts'
 import { fetchVolumeFromUrl, fetchVolumeFromS3, s3UriToHttps, fetchVolumeJsonGz } from './utils/fetch-volume.ts'
 import { decompressGzip } from './utils/gzip.ts'
 import { SSOAuthFlow } from './components/SSOAuthFlow.tsx'
-import { MaterialsSearch } from './MaterialsSearch.tsx'
+import { MaterialsSearch, MATERIALS_MANIFEST } from './MaterialsSearch.tsx'
+import { resolveLoadUrl } from '@elvis/corpora'
 import { BrowseMaterials } from './BrowseMaterials.tsx'
 import type { FetchProgress } from './utils/fetch-volume.ts'
 import type { AWSCredentials } from './utils/aws-credentials.ts'
@@ -221,6 +222,7 @@ export default function App() {
   const [cam, setCam] = useUrlState('c', camParam)
   const [camTarget, setCamTarget] = useUrlState('ct', camTargetParam, { debounce: 500 })
   const [materialId, setMaterialId] = useUrlState('m', stringParam(DEFAULT_MP_ID), { push: true })
+  const [srcRole, setSrcRole] = useUrlState('src', stringParam('label')) as ['input' | 'label', (v: 'input' | 'label') => void]
   const [currentVolumeId, setCurrentVolumeIdRaw] = useState<string | null>(
     () => sessionStorage.getItem('elvis-active-volume'),
   )
@@ -500,6 +502,27 @@ export default function App() {
     group: 'Data',
     defaultBindings: ['shift+z'],
     handler: () => setUseZarr(!useZarr),
+  })
+  useAction('data:toggle-src', {
+    label: 'Toggle SAD input vs DFT label',
+    description: 'Switch between SAD initial guess (input) and converged DFT (label) density',
+    keywords: ['input', 'label', 'sad', 'dft', 'source', 'role'],
+    group: 'Data',
+    defaultBindings: ['i'],
+    handler: () => {
+      const next: 'input' | 'label' = srcRole === 'input' ? 'label' : 'input'
+      setSrcRole(next)
+      // The URL param `m` may be a material_id (mp-573119) OR a task_id (mp-1775579) —
+      // ElectrAI S3 uses task IDs while the corpora manifest indexes by material ID.
+      const record = MATERIALS_MANIFEST.records.find(r =>
+        r.id === materialId ||
+        Object.values(r.datasets).some(d => d?.task_ids?.includes(materialId)),
+      )
+      if (record) {
+        const url = resolveLoadUrl(record, next, useZarr ? 'zarr' : 'chgcar')
+        if (url) handleUrlSubmit(url)
+      }
+    },
   })
   useAction('view:toggle-color-by-density', {
     label: 'Toggle iso color by density',
@@ -1304,6 +1327,7 @@ export default function App() {
                 />
               ) : (
                 <DensityViewer
+                  label={srcRole === 'input' ? 'Input (SAD)' : 'Label (DFT)'}
                   volume={primaryFile.data}
                   isoLevel={effectiveIsoLevel}
                   opacity={opacity}
@@ -1502,8 +1526,8 @@ export default function App() {
       />
 
       <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
-      <MaterialsSearch onSelect={handleUrlSubmit} format={useZarr ? 'zarr' : 'chgcar'} />
-      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} format={useZarr ? 'zarr' : 'chgcar'} />
+      <MaterialsSearch onSelect={handleUrlSubmit} role={srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
+      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} role={srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
       <Omnibar />
       <SequenceModal />
       <LookupModal />
