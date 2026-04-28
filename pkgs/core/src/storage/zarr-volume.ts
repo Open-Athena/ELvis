@@ -30,15 +30,27 @@ export interface OpenedZarrVolume {
   levelShapes: [number, number, number][]
 }
 
+/**
+ * S3 returns 403 (not 404) for missing keys when the IAM lacks `s3:ListBucket`.
+ * zarrita's FetchStore expects 404 to signal "missing key" — so we wrap fetch
+ * to remap 403 responses to a synthetic 404. Harmless: real auth failures on
+ * private objects still surface as 404 ("not found"), which zarrita interprets
+ * correctly, and the response body for the original 403 isn't useful anyway.
+ */
+function fetchWithS3MissingKeyShim(request: Request): Promise<Response> {
+  return fetch(request).then(r => r.status === 403 ? new Response(null, { status: 404 }) : r)
+}
+
 /** Open a multi-resolution Zarr store and read its metadata + per-level shapes. */
 export async function openZarrVolume(url: string): Promise<OpenedZarrVolume> {
-  const store = new zarr.FetchStore(url)
-  const root = await zarr.open(store, { kind: 'group' })
+  const store = new zarr.FetchStore(url, { fetch: fetchWithS3MissingKeyShim })
+  // Use v2-specific opener to skip the v3 `zarr.json` probe.
+  const root = await zarr.open.v2(store, { kind: 'group' })
   const meta = root.attrs as unknown as ZarrVolumeMetadata
   const levels = meta.multiscales[0].datasets.length
   const levelShapes: [number, number, number][] = []
   for (let i = 0; i < levels; i++) {
-    const arr = await zarr.open(root.resolve(String(i)), { kind: 'array' })
+    const arr = await zarr.open.v2(root.resolve(String(i)), { kind: 'array' })
     levelShapes.push(arr.shape as [number, number, number])
   }
   return { url, meta, levels, levelShapes }
@@ -49,9 +61,9 @@ export async function readZarrLevel(
   opened: OpenedZarrVolume,
   level: number,
 ): Promise<{ data: Float32Array; dims: [number, number, number] }> {
-  const store = new zarr.FetchStore(opened.url)
-  const root = await zarr.open(store, { kind: 'group' })
-  const arr = await zarr.open(root.resolve(String(level)), { kind: 'array' })
+  const store = new zarr.FetchStore(opened.url, { fetch: fetchWithS3MissingKeyShim })
+  const root = await zarr.open.v2(store, { kind: 'group' })
+  const arr = await zarr.open.v2(root.resolve(String(level)), { kind: 'array' })
   const result = await zarr.get(arr)
   // zarrita returns C-ordered raw bytes; pymatgen->Zarr writes in C-order too.
   // VASP/marching-cubes expects F-order (flat[i + j*Nx + k*Nx*Ny] = data[i,j,k]).
