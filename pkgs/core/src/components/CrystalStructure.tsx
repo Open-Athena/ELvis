@@ -19,6 +19,8 @@ interface CrystalStructureProps {
   tiles?: TileInfo[]
   tilePadding?: number
   tileFade?: number
+  /** When set, atoms of this element render normally; others fade aggressively. */
+  highlightElement?: string | null
 }
 
 // Lattice vector colors — YOV (yellow, orange, violet), warm complement of gizmo RGB
@@ -108,7 +110,7 @@ function quantizeOpacity(o: number): number {
   return Math.round(o * 20) / 20
 }
 
-export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCell, showXyzBox, dashedLines, lineWidth = 1, tiles, tilePadding = 0, tileFade = 1 }: CrystalStructureProps) {
+export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCell, showXyzBox, dashedLines, lineWidth = 1, tiles, tilePadding = 0, tileFade = 1, highlightElement }: CrystalStructureProps) {
   const { lattice, structure } = volume
 
   // Group atoms by (element, quantized opacity) for tiled instanced rendering
@@ -128,7 +130,9 @@ export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCel
           atom.fracCoords[1] + tile.fracOffset[1],
           atom.fracCoords[2] + tile.fracOffset[2],
         ]
-        const opacity = tile.isPrimary ? 1 : atomOpacity(fracPos, tilePadding, tileFade)
+        const dim = highlightElement != null && atom.element !== highlightElement ? 0.15 : 1
+        const tileOp = tile.isPrimary ? 1 : atomOpacity(fracPos, tilePadding, tileFade)
+        const opacity = tileOp * dim
         if (opacity <= 0) continue
 
         const qo = quantizeOpacity(opacity)
@@ -147,7 +151,7 @@ export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCel
       }
     }
     return { atomGroups: groups, labelAtoms: labels }
-  }, [lattice, structure, tiles, tilePadding, tileFade])
+  }, [lattice, structure, tiles, tilePadding, tileFade, highlightElement])
 
   const origin = useMemo(() => fracToCart(lattice, [0, 0, 0]), [lattice])
 

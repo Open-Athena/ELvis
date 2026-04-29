@@ -203,7 +203,7 @@ export default function App() {
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
   const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
   const [showXyzBox, setShowXyzBox] = useUrlState('xb', boolParam)
-  const [showAtomLabels, setShowAtomLabels] = useUrlState('al', boolParam)
+  const [showAtomLabels, setShowAtomLabels] = useUrlState('al', boolTrueParam)
   const [dashedLines, setDashedLines] = useUrlState('dl', boolParam)
   const [showSlice, setShowSlice] = useUrlState('sl', boolTrueParam)
   const [sliceAxis, setSliceAxis] = useUrlState('sa', intParam(2)) as [0 | 1 | 2, (v: 0 | 1 | 2) => void]
@@ -239,6 +239,7 @@ export default function App() {
   })
   const [urlLoading, setUrlLoading] = useState(false)
   const [fetchStatus, setFetchStatus] = useState<string | null>(null)
+  const [highlightElement, setHighlightElement] = useState<string | null>(null)
   const [awsModalOpen, setAwsModalOpen] = useState(false)
   const [browseOpen, setBrowseOpen] = useState(false)
   const [awsCreds, setAwsCreds] = useState<AWSCredentials | null>(loadCredentials)
@@ -1399,6 +1400,7 @@ export default function App() {
                   glbUrl={glbUrl}
                   surfaceColor={sampledColor?.color ?? null}
                   surfaceOpacityOverride={sampledColor?.opacity ?? null}
+                  highlightElement={highlightElement}
                 />
               )}
               {showSlice && (() => {
@@ -1529,6 +1531,8 @@ export default function App() {
               onTilePaddingChange={setTilePadding}
               tileFade={tileFade}
               onTileFadeChange={setTileFade}
+              highlightElement={highlightElement}
+              onHighlightElementChange={setHighlightElement}
             />
           </ErrorBoundary>
         )}

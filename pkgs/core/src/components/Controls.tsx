@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { getElement } from '../utils/elements.ts'
 import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
 import styles from './Controls.module.css'
@@ -59,6 +60,10 @@ interface ControlsProps {
   onTilePaddingChange?: (v: number) => void
   tileFade?: number
   onTileFadeChange?: (v: number) => void
+  /** Element symbol currently hovered in the legend (controlled by parent) */
+  highlightElement?: string | null
+  /** Called when the user hovers/unhovers an element pill in the legend */
+  onHighlightElementChange?: (el: string | null) => void
 }
 
 const AXIS_LABELS = ['X', 'Y', 'Z'] as const
@@ -128,21 +133,90 @@ export function Controls({
   onTilePaddingChange,
   tileFade,
   onTileFadeChange,
+  highlightElement: _highlightElement,
+  onHighlightElementChange,
 }: ControlsProps) {
   const tp = tilePadding ?? 0
   const hasTiling = tp > 0
+
+  // Element legend brushing: pin via click (sticky), hover otherwise.
+  const [pinned, setPinned] = useState<string | null>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
+  const active = pinned ?? hovered
+  useEffect(() => {
+    onHighlightElementChange?.(active)
+  }, [active, onHighlightElementChange])
+
+  // Only "meaningless" clicks (empty space, no drag, not on an interactive control) unpin.
+  useEffect(() => {
+    if (!pinned) return
+    const INTERACTIVE = [
+      'input', 'button', 'select', 'textarea', 'label', 'a', 'summary',
+      '[role="button"]', '[role="checkbox"]', '[role="slider"]', '[role="link"]',
+      '[role="menuitem"]', '[role="tab"]', '[role="switch"]', '[role="combobox"]',
+      '[contenteditable=""]', '[contenteditable="true"]',
+      '[data-legend-item]',
+    ].join(',')
+    let downX = 0
+    let downY = 0
+    let downInteractive = false
+    const onDown = (e: MouseEvent) => {
+      downX = e.clientX
+      downY = e.clientY
+      downInteractive = !!(e.target as Element | null)?.closest(INTERACTIVE)
+    }
+    const onUp = (e: MouseEvent) => {
+      // Drag (>5px movement) → preserve pin
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return
+      if (downInteractive) return
+      if ((e.target as Element | null)?.closest(INTERACTIVE)) return
+      setPinned(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [pinned])
 
   return (
     <div className={styles.controls}>
       <div className={styles.controlTitle}>{filename}</div>
       {elements && elements.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, padding: '2px 0 6px', flexWrap: 'wrap' }}>
+        <div
+          style={{ display: 'flex', gap: 8, padding: '2px 0 6px', flexWrap: 'wrap' }}
+          onMouseLeave={() => setHovered(null)}
+        >
           {elements.map((el, i) => {
             const { color } = getElement(el)
             const css = `#${color.toString(16).padStart(6, '0')}`
             const count = counts?.[i]
+            const isActive = active === el
+            const isDimmed = active != null && !isActive
+            const isPinned = pinned === el
             return (
-              <span key={el} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#ccc' }}>
+              <span
+                key={el}
+                data-legend-item=""
+                onMouseEnter={() => setHovered(el)}
+                onClick={() => setPinned(p => p === el ? null : el)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 12,
+                  color: '#ccc',
+                  cursor: 'pointer',
+                  opacity: isDimmed ? 0.4 : 1,
+                  fontWeight: isActive ? 600 : 400,
+                  transition: 'opacity 120ms, font-weight 120ms',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  border: isPinned ? `1px solid ${css}` : '1px solid transparent',
+                  userSelect: 'none',
+                }}
+              >
                 <span style={{
                   width: 10,
                   height: 10,
