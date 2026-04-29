@@ -113,12 +113,11 @@ export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCel
 
   // Group atoms by (element, quantized opacity) for tiled instanced rendering
   // When tilePadding > 0, per-atom opacity is computed from fractional-coordinate distance
-  // Label atoms: only atoms whose fractional center is inside [0,1]³ (with small tolerance for boundary atoms)
+  // Label atoms: every drawn atom copy gets a label, faded with the same opacity
   const { atomGroups, labelAtoms } = useMemo(() => {
     const groups = new Map<string, Array<[number, number, number]>>()
-    const labels: Array<{ element: string; pos: [number, number, number] }> = []
+    const labels: Array<{ element: string; pos: [number, number, number]; opacity: number }> = []
     const tileList = tiles ?? [{ fracOffset: [0, 0, 0] as [number, number, number], cartOffset: [0, 0, 0] as [number, number, number], opacity: 1, isPrimary: true }]
-    const eps = 0.01
 
     for (const tile of tileList) {
       if (tile.opacity <= 0) continue
@@ -144,11 +143,7 @@ export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCel
         arr.push(pos)
         groups.set(key, arr)
 
-        // Collect label candidates: atoms inside or on boundary of primary cell
-        const inCell = fracPos[0] >= -eps && fracPos[0] <= 1 + eps &&
-                       fracPos[1] >= -eps && fracPos[1] <= 1 + eps &&
-                       fracPos[2] >= -eps && fracPos[2] <= 1 + eps
-        if (inCell) labels.push({ element: atom.element, pos })
+        labels.push({ element: atom.element, pos, opacity })
       }
     }
     return { atomGroups: groups, labelAtoms: labels }
@@ -258,12 +253,12 @@ export function CrystalStructure({ volume, showAtoms, showAtomLabels, showAbcCel
           <AtomInstances key={key} element={element} positions={positions} opacity={opacity} />
         )
       })}
-      {showAtoms && showAtomLabels && labelAtoms.map(({ element, pos }, i) => {
+      {showAtoms && showAtomLabels && labelAtoms.map(({ element, pos, opacity }, i) => {
         const { color, radius } = getElement(element)
         const css = `#${color.toString(16).padStart(6, '0')}`
         return (
           <Billboard key={`label-${i}`} position={[pos[0], pos[1] + radius * 0.4 + 0.15, pos[2]]}>
-            <Text fontSize={0.2} color={css} anchorY="bottom" fillOpacity={0.85} outlineWidth={0.015} outlineColor="#000000">
+            <Text fontSize={0.2} color={css} anchorY="bottom" fillOpacity={0.85 * opacity} outlineWidth={0.015} outlineColor="#000000" outlineOpacity={opacity}>
               {element}
             </Text>
           </Billboard>
@@ -358,9 +353,9 @@ function AtomInstances({ element, positions, opacity = 1 }: { element: string; p
   }, [positions, dummy])
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} renderOrder={1}>
       <sphereGeometry args={[radius * 0.4, 16, 12]} />
-      <meshStandardMaterial color={new Color(color)} transparent={opacity < 1} opacity={opacity} depthWrite={opacity >= 1} />
+      <meshStandardMaterial color={new Color(color)} transparent={opacity < 1} opacity={opacity} depthWrite />
     </instancedMesh>
   )
 }
