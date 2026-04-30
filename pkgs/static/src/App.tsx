@@ -33,6 +33,7 @@ import { decompressGzip } from './utils/gzip.ts'
 import { SSOAuthFlow } from './components/SSOAuthFlow.tsx'
 import { MaterialsSearch, MATERIALS_MANIFEST } from './MaterialsSearch.tsx'
 import { resolveLoadUrl } from '@elvis/corpora'
+import type { MaterialRecord } from '@elvis/corpora'
 import { BrowseMaterials } from './BrowseMaterials.tsx'
 import type { FetchProgress } from './utils/fetch-volume.ts'
 import type { AWSCredentials } from './utils/aws-credentials.ts'
@@ -514,6 +515,7 @@ export default function App() {
     handler: () => {
       const next: SrcRole = srcRole === 'label' ? 'input' : srcRole === 'input' ? 'diff' : 'label'
       setSrcRole(next)
+      if (!materialId) return
       // The URL param `m` may be a material_id (mp-573119) OR a task_id (mp-1775579) —
       // ElectrAI S3 uses task IDs while the corpora manifest indexes by material ID.
       const record = MATERIALS_MANIFEST.records.find(r =>
@@ -1106,7 +1108,7 @@ export default function App() {
     setFetchStatus(null)
   }, [setCurrentVolumeId])
 
-  const loadDiff = useCallback(async (record: { id: string; datasets: Record<string, { task_ids: string[] } | undefined> }) => {
+  const loadDiff = useCallback(async (record: MaterialRecord) => {
     setUrlLoading(true)
     setFiles([])
     setFetchStatus('Loading input + label for diff...')
@@ -1575,8 +1577,8 @@ export default function App() {
       />
 
       <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
-      <MaterialsSearch onSelect={handleUrlSubmit} role={srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
-      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} role={srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
+      <MaterialsSearch onSelect={handleUrlSubmit} role={srcRole === 'diff' ? 'label' : srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
+      <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} role={srcRole === 'diff' ? 'label' : srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
       <Omnibar />
       <SequenceModal />
       <LookupModal />
