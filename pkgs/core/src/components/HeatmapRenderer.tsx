@@ -12,6 +12,10 @@ import type { TileInfo } from '../utils/tiling.ts'
 
 interface HeatmapRendererProps {
   volume: VolumeData
+  /** Min density value across the volume (in raw data units). */
+  dataMin: number
+  /** Max density value across the volume (in raw data units). */
+  dataMax: number
   /** Overall opacity multiplier (≈ how dense the cloud looks). */
   opacity: number
   /** Gamma applied to density before alpha mapping; >1 emphasizes high-density regions. */
@@ -20,6 +24,13 @@ interface HeatmapRendererProps {
   lowCutoff?: number
   /** Number of ray-march samples per pixel. Higher = smoother but slower. */
   stepCount?: number
+  /**
+   * When true (default), terminate rays that enter an atom sphere. Prevents glow from
+   * accumulating past atoms (visible artifact when atoms are opaque). Set false to render
+   * density inside atom radii — important for visualizing diffs in ionic systems where
+   * residuals concentrate at the anion position.
+   */
+  clipAtoms?: boolean
   tiles?: TileInfo[]
   tilePadding?: number
   tileFade?: number
@@ -187,7 +198,17 @@ void main() {
 
       if (uPadding > 0.0 && uFade > 0.0) {
         float d = chebyshevDist(fracP);
-        if (d > 0.0) a *= pow(1.0 - clamp(d / uPadding, 0.0, 1.0), uFade);
+        if (d > 0.0) {
+          float t = clamp(d / uPadding, 0.0, 1.0);
+          // Linear-pow falloff (uFade slider controls strength) PLUS a smoothstep
+          // cutoff that forces alpha to zero past ~half the padding. Without the
+          // cutoff, the front-shell accumulates enough alpha to paint visible
+          // patterns on the outer bounding-box faces (especially when atom-clip
+          // terminates rays inside the cell, exposing only the shell contribution).
+          float linearFade = pow(1.0 - t, uFade);
+          float shellCutoff = 1.0 - smoothstep(0.4, 0.85, t);
+          a *= linearFade * shellCutoff;
+        }
       }
 
       acc.rgb += (1.0 - acc.a) * col * a;
@@ -203,7 +224,8 @@ void main() {
 `
 
 export function HeatmapRenderer({
-  volume, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
+  volume, dataMin, dataMax, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
+  clipAtoms = true,
   tiles: _tiles, tilePadding = 0, tileFade = 1,
 }: HeatmapRendererProps) {
   const { camera } = useThree()
@@ -211,14 +233,9 @@ export function HeatmapRenderer({
   const { dims, data } = volume.grid
 
   const texture = useMemo(() => {
-    let dMin = Infinity, dMax = -Infinity
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] < dMin) dMin = data[i]
-      if (data[i] > dMax) dMax = data[i]
-    }
-    const range = dMax - dMin || 1
+    const range = dataMax - dataMin || 1
     const norm = new Float32Array(data.length)
-    for (let i = 0; i < data.length; i++) norm[i] = (data[i] - dMin) / range
+    for (let i = 0; i < data.length; i++) norm[i] = (data[i] - dataMin) / range
 
     const tex = new Data3DTexture(norm, dims[0], dims[1], dims[2])
     tex.format = RedFormat
@@ -230,7 +247,7 @@ export function HeatmapRenderer({
     tex.wrapR = ClampToEdgeWrapping
     tex.needsUpdate = true
     return tex
-  }, [data, dims])
+  }, [data, dims, dataMin, dataMax])
 
   const cartToFrac = useMemo(() => {
     const L = volume.lattice
@@ -266,6 +283,8 @@ export function HeatmapRenderer({
     return { atomsArray: arr, atomCount: n }
   }, [volume.structure])
 
+  const effectiveAtomCount = clipAtoms ? atomCount : 0
+
   const uniforms = useMemo(() => ({
     uVolume: { value: texture },
     uCartToFrac: { value: cartToFrac.clone() },
@@ -277,7 +296,7 @@ export function HeatmapRenderer({
     uGamma: { value: gamma },
     uStepCount: { value: stepCount },
     uLowCutoff: { value: lowCutoff },
-    uAtomCount: { value: atomCount },
+    uAtomCount: { value: effectiveAtomCount },
     uAtoms: { value: atomsArray },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [texture])
@@ -295,7 +314,7 @@ export function HeatmapRenderer({
     mat.uniforms.uCartToFrac.value.copy(cartToFrac)
     mat.uniforms.uFracToCart.value.copy(fracToCartM)
     mat.uniforms.uVolume.value = texture
-    mat.uniforms.uAtomCount.value = atomCount
+    mat.uniforms.uAtomCount.value = effectiveAtomCount
     mat.uniforms.uAtoms.value = atomsArray
   })
 

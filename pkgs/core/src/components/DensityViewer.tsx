@@ -17,6 +17,8 @@ import type { CameraSnapTarget } from './CameraController.tsx'
 import { SlicePlane3D } from './SlicePlane3D.tsx'
 import { fracToCart } from '../utils/lattice.ts'
 import { computeTiles } from '../utils/tiling.ts'
+import { volumeMinMax } from '../utils/volume-stats.ts'
+import { HeatmapLegend } from './HeatmapLegend.tsx'
 
 const _projA = new Vector3()
 const _projB = new Vector3()
@@ -77,6 +79,8 @@ interface DensityViewerProps {
   heatmapLowCutoff?: number
   /** Ray-march sample count. */
   heatmapStepCount?: number
+  /** Units suffix for the heatmap legend (e.g. "e/Å³"). */
+  heatmapUnits?: string
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -115,6 +119,7 @@ export function DensityViewer({
   heatmapGamma,
   heatmapLowCutoff,
   heatmapStepCount,
+  heatmapUnits,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -134,6 +139,8 @@ export function DensityViewer({
     const c = fracToCart(volume.lattice, [0.5, 0.5, 0.5])
     return new Vector3(c[0] + 15, c[1] + 10, c[2] + 15)
   }, [volume.lattice])
+
+  const dataRange = useMemo(() => volumeMinMax(volume.grid.data), [volume.grid.data])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -162,7 +169,7 @@ export function DensityViewer({
         {glbUrl
           ? <GlbPreviewRenderer url={glbUrl} opacity={surfaceOpacityOverride ?? opacity} color={surfaceColor ?? undefined} />
           : useHeatmap
-            ? <HeatmapRenderer volume={volume} opacity={surfaceOpacityOverride ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} opacity={surfaceOpacityOverride ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
             : useGpuVolume
               ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
               : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
@@ -189,6 +196,15 @@ export function DensityViewer({
           )}
         </GizmoHelper>
       </Canvas>
+      {useHeatmap && (
+        <HeatmapLegend
+          dataMin={dataRange.min}
+          dataMax={dataRange.max}
+          gamma={heatmapGamma ?? 2.5}
+          lowCutoff={heatmapLowCutoff ?? 0}
+          units={heatmapUnits}
+        />
+      )}
     </div>
   )
 }

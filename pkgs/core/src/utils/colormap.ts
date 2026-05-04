@@ -19,3 +19,20 @@ export function viridis(t: number): [number, number, number] {
     VIRIDIS[lo][2] + f * (VIRIDIS[hi][2] - VIRIDIS[lo][2]),
   ]
 }
+
+/**
+ * Turbo colormap at t ∈ [0, 1] → [r, g, b] in 0–255.
+ * Polynomial fit by Anton Mikhailov; matches the GLSL `turbo` in HeatmapRenderer.
+ */
+export function turbo(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, isFinite(t) ? t : 0))
+  const x2 = x * x, x3 = x2 * x, x4 = x2 * x2, x5 = x3 * x2
+  const r = 0.13572138 + 4.61539260 * x + -42.66032258 * x2 + 132.13108234 * x3 + -152.94239396 * x4 + 59.28637943 * x5
+  const g = 0.09140261 + 2.19418839 * x +   4.84296658 * x2 + -14.18503333 * x3 +    4.27729857 * x4 +  2.82956604 * x5
+  const b = 0.10667330 + 12.64194608 * x + -60.58204836 * x2 + 110.36276771 * x3 +  -89.90310912 * x4 + 27.34824973 * x5
+  return [
+    Math.max(0, Math.min(255, r * 255)),
+    Math.max(0, Math.min(255, g * 255)),
+    Math.max(0, Math.min(255, b * 255)),
+  ]
+}
