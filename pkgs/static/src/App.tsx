@@ -21,6 +21,7 @@ import {
   densityToQuantile,
   DEFAULT_RAMP,
   fetchZarrVolume,
+  parseS3Pattern,
 } from '@elvis/core'
 import { ShortcutsModal, Omnibar, SequenceModal, LookupModal, SpeedDial, ModeIndicator, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
 import type { SpeedDialAction } from 'use-kbd'
@@ -243,6 +244,9 @@ export default function App() {
   // Diff mode operand overrides (only meaningful when src=diff). Empty = auto-resolve from `m=`.
   const [v0Url, setV0Url] = useUrlState('v0', stringParam(''))
   const [v1Url, setV1Url] = useUrlState('v1', stringParam(''))
+  // Condensed pattern (`?s3=...{a,b}...` for brace expand, `*` or trailing-prefix for LIST).
+  // Only consulted when v0/v1 are empty; explicit overrides always win.
+  const [s3Pattern, setS3Pattern] = useUrlState('s3', stringParam(''))
   // Effective slice visibility resolves the tri-state: explicit URL wins, else default
   // depends on srcRole (off in diff because the slice fights the volumetric heatmap).
   const showSlice = showSliceUrl ?? (srcRole !== 'diff')
@@ -255,14 +259,23 @@ export default function App() {
       Object.values(r.datasets).some(d => d?.task_ids?.includes(materialId)),
     ) ?? null
   }, [materialId])
-  const v0AutoUrl = useMemo(
-    () => currentRecord ? (resolveLoadUrl(currentRecord, 'label', 'zarr') ?? '') : '',
-    [currentRecord],
-  )
-  const v1AutoUrl = useMemo(
-    () => currentRecord ? (resolveLoadUrl(currentRecord, 'input', 'zarr') ?? '') : '',
-    [currentRecord],
-  )
+  // Pattern expansion (Phase A: brace only, sync). Phase B will async-resolve `glob`.
+  const s3Expansion = useMemo(() => parseS3Pattern(s3Pattern ?? ''), [s3Pattern])
+  const s3PatternError = useMemo(() => {
+    if (!s3Expansion) return null
+    if (s3Expansion.kind === 'error') return s3Expansion.reason
+    if (s3Expansion.kind === 'glob') return 'Glob/prefix `?s3=` patterns require LIST (Phase B — coming soon)'
+    return null
+  }, [s3Expansion])
+  // Default chain for each operand: explicit override > `?s3=` brace expansion > manifest auto.
+  const v0AutoUrl = useMemo(() => {
+    if (s3Expansion?.kind === 'brace') return s3Expansion.v0
+    return currentRecord ? (resolveLoadUrl(currentRecord, 'label', 'zarr') ?? '') : ''
+  }, [s3Expansion, currentRecord])
+  const v1AutoUrl = useMemo(() => {
+    if (s3Expansion?.kind === 'brace') return s3Expansion.v1
+    return currentRecord ? (resolveLoadUrl(currentRecord, 'input', 'zarr') ?? '') : ''
+  }, [s3Expansion, currentRecord])
   const [currentVolumeId, setCurrentVolumeIdRaw] = useState<string | null>(
     () => sessionStorage.getItem('elvis-active-volume'),
   )
@@ -1203,20 +1216,28 @@ export default function App() {
   loadDiffRef.current = loadDiff
 
   // Drive `?src=diff` from URL: when srcRole becomes 'diff' (initial mount or via hotkey),
-  // or when v0/v1/record change while in diff mode, (re)fetch and compute the diff volume.
+  // or when v0/v1/record/pattern change while in diff mode, (re)fetch and compute the diff volume.
   useEffect(() => {
     if (srcRole !== 'diff') return
     if (!useZarr) {
       setFetchStatus('Diff view requires Zarr mode (Shift+Z)')
       return
     }
-    const haveOverrides = !!(v0Url && v1Url)
-    if (!currentRecord && !haveOverrides) {
-      if (v0Url || v1Url) setFetchStatus('Diff requires both v0 and v1 URLs')
+    if (s3PatternError) {
+      setFetchStatus(s3PatternError)
       return
     }
-    loadDiffRef.current(currentRecord, v0Url || undefined, v1Url || undefined)
-  }, [srcRole, currentRecord, v0Url, v1Url, useZarr])
+    // Resolve operands: explicit `?v0=`/`?v1=` win, then brace expansion of `?s3=`,
+    // finally manifest auto-resolve from `?m=`.
+    const v0Resolved = v0Url || (s3Expansion?.kind === 'brace' ? s3Expansion.v0 : undefined)
+    const v1Resolved = v1Url || (s3Expansion?.kind === 'brace' ? s3Expansion.v1 : undefined)
+    const haveBoth = !!(v0Resolved && v1Resolved)
+    if (!currentRecord && !haveBoth) {
+      if (v0Resolved || v1Resolved) setFetchStatus('Diff requires both v0 and v1 URLs')
+      return
+    }
+    loadDiffRef.current(currentRecord, v0Resolved, v1Resolved)
+  }, [srcRole, currentRecord, v0Url, v1Url, s3Expansion, s3PatternError, useZarr])
 
   const handleUrlSubmit = useCallback(async (url: string) => {
     setUrlLoading(true)
@@ -1451,7 +1472,7 @@ export default function App() {
                   label={
                     srcRole === 'input' ? 'Input (SAD)'
                     : srcRole === 'diff'
-                      ? ((v0Url && v0Url.length > 0) || (v1Url && v1Url.length > 0)) ? '|v0 − v1|' : '|Label − Input|'
+                      ? (v0Url || v1Url || s3Pattern) ? '|v0 − v1|' : '|Label − Input|'
                       : 'Label (DFT)'
                   }
                   volume={primaryFile.data}
@@ -1560,8 +1581,10 @@ export default function App() {
             v1Url={v1Url ?? ''}
             v0Default={v0AutoUrl}
             v1Default={v1AutoUrl}
+            s3Pattern={s3Pattern ?? ''}
             onV0Change={setV0Url}
             onV1Change={setV1Url}
+            onS3PatternChange={setS3Pattern}
           />
         )}
         {fetchStatus && (

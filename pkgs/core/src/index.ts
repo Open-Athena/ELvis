@@ -30,6 +30,8 @@ export { sampleRamp, densityToQuantile, quantileToDensity, DEFAULT_RAMP } from '
 export type { ColorStop, SampledColor } from './utils/color-ramp.ts'
 export { computeTiles, atomOpacity, distFromPrimaryCell } from './utils/tiling.ts'
 export type { TileInfo } from './utils/tiling.ts'
+export { parseS3Pattern, factorPair, commonPrefixLen, commonSuffixLen } from './utils/s3-pattern.ts'
+export type { S3Expansion, FactorResult } from './utils/s3-pattern.ts'
 export { getElement, ELEMENTS } from './utils/elements.ts'
 export type { ElementData } from './utils/elements.ts'
 
