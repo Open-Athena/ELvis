@@ -199,6 +199,10 @@ export default function App() {
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
   const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
   const [useGlbPreview, setUseGlbPreview] = useUrlState('glb', boolParam)
+  const [useHeatmap, setUseHeatmap] = useUrlState('heat', boolParam)
+  const [heatmapGamma, setHeatmapGamma] = useUrlState('hg', floatParam({ default: 2.5, encoding: 'string', decimals: 2 }), { debounce: 100 })
+  const [heatmapLowCutoff, setHeatmapLowCutoff] = useUrlState('hl', floatParam({ default: 0, encoding: 'string', decimals: 2 }), { debounce: 100 })
+  const [heatmapStepCount, setHeatmapStepCount] = useUrlState('hs', intParam(256), { debounce: 100 })
   const [useZarr, setUseZarr] = useUrlState('zarr', boolParam)
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
@@ -497,6 +501,14 @@ export default function App() {
     group: 'View',
     defaultBindings: ['shift+g'],
     handler: () => setUseGlbPreview(!useGlbPreview),
+  })
+  useAction('view:toggle-heatmap', {
+    label: 'Toggle volumetric heatmap',
+    description: 'Render full density as a turbo-colormapped translucent cloud (replaces iso-surface)',
+    keywords: ['heatmap', 'volume', 'density', 'turbo', 'cloud'],
+    group: 'View',
+    defaultBindings: ['shift+h'],
+    handler: () => setUseHeatmap(!useHeatmap),
   })
   useAction('data:toggle-zarr', {
     label: 'Toggle Zarr loader',
@@ -1399,6 +1411,10 @@ export default function App() {
                   abcIsXyz={abcIsXyz}
                   sliceStepSignRef={sliceStepSignRef}
                   useGpuVolume={useGpuVolume}
+                  useHeatmap={useHeatmap}
+                  heatmapGamma={heatmapGamma}
+                  heatmapLowCutoff={heatmapLowCutoff}
+                  heatmapStepCount={heatmapStepCount}
                   glbUrl={glbUrl}
                   surfaceColor={sampledColor?.color ?? null}
                   surfaceOpacityOverride={sampledColor?.opacity ?? null}
@@ -1535,6 +1551,13 @@ export default function App() {
               onTileFadeChange={setTileFade}
               highlightElement={highlightElement}
               onHighlightElementChange={setHighlightElement}
+              useHeatmap={useHeatmap}
+              heatmapGamma={heatmapGamma}
+              onHeatmapGammaChange={setHeatmapGamma}
+              heatmapLowCutoff={heatmapLowCutoff}
+              onHeatmapLowCutoffChange={setHeatmapLowCutoff}
+              heatmapStepCount={heatmapStepCount}
+              onHeatmapStepCountChange={setHeatmapStepCount}
             />
           </ErrorBoundary>
         )}

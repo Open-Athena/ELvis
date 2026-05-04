@@ -64,6 +64,14 @@ interface ControlsProps {
   highlightElement?: string | null
   /** Called when the user hovers/unhovers an element pill in the legend */
   onHighlightElementChange?: (el: string | null) => void
+  /** Heatmap-mode params (only meaningful when heatmap mode is on). */
+  useHeatmap?: boolean
+  heatmapGamma?: number
+  onHeatmapGammaChange?: (v: number) => void
+  heatmapLowCutoff?: number
+  onHeatmapLowCutoffChange?: (v: number) => void
+  heatmapStepCount?: number
+  onHeatmapStepCountChange?: (v: number) => void
 }
 
 const AXIS_LABELS = ['X', 'Y', 'Z'] as const
@@ -135,6 +143,13 @@ export function Controls({
   onTileFadeChange,
   highlightElement: _highlightElement,
   onHighlightElementChange,
+  useHeatmap,
+  heatmapGamma = 2.5,
+  onHeatmapGammaChange,
+  heatmapLowCutoff = 0,
+  onHeatmapLowCutoffChange,
+  heatmapStepCount = 256,
+  onHeatmapStepCountChange,
 }: ControlsProps) {
   const tp = tilePadding ?? 0
   const hasTiling = tp > 0
@@ -301,6 +316,80 @@ export function Controls({
           </div>
         </div>
       </details>
+
+      {useHeatmap && onHeatmapGammaChange && onHeatmapLowCutoffChange && onHeatmapStepCountChange && (
+        <details className={styles.section} open>
+          <summary className={styles.sectionTitle}>Heatmap</summary>
+          <div className={styles.sectionBody}>
+            <div className={styles.controlLabel}>
+              <div className={styles.sliderHeader}>
+                <span>Gamma: {heatmapGamma.toFixed(2)}</span>
+                <button
+                  className={styles.resetBtn}
+                  onClick={() => onHeatmapGammaChange(2.5)}
+                  title="Reset to 2.50"
+                  disabled={Math.abs(heatmapGamma - 2.5) <= 0.01}
+                >
+                  <ResetIcon />
+                </button>
+              </div>
+              <input
+                type="range"
+                min={0.5}
+                max={5}
+                step={0.05}
+                value={heatmapGamma}
+                onChange={e => onHeatmapGammaChange(parseFloat(e.target.value))}
+                className={styles.slider}
+              />
+            </div>
+            <div className={styles.controlLabel}>
+              <div className={styles.sliderHeader}>
+                <span>Low cutoff: {heatmapLowCutoff.toFixed(2)}</span>
+                <button
+                  className={styles.resetBtn}
+                  onClick={() => onHeatmapLowCutoffChange(0)}
+                  title="Reset to 0"
+                  disabled={heatmapLowCutoff === 0}
+                >
+                  <ResetIcon />
+                </button>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={0.5}
+                step={0.01}
+                value={heatmapLowCutoff}
+                onChange={e => onHeatmapLowCutoffChange(parseFloat(e.target.value))}
+                className={styles.slider}
+              />
+            </div>
+            <div className={styles.controlLabel}>
+              <div className={styles.sliderHeader}>
+                <span>Steps: {heatmapStepCount}</span>
+                <button
+                  className={styles.resetBtn}
+                  onClick={() => onHeatmapStepCountChange(256)}
+                  title="Reset to 256"
+                  disabled={heatmapStepCount === 256}
+                >
+                  <ResetIcon />
+                </button>
+              </div>
+              <input
+                type="range"
+                min={64}
+                max={512}
+                step={32}
+                value={heatmapStepCount}
+                onChange={e => onHeatmapStepCountChange(parseInt(e.target.value))}
+                className={styles.slider}
+              />
+            </div>
+          </div>
+        </details>
+      )}
 
       <details className={styles.section} open>
         <summary className={styles.sectionTitle}>Display</summary>

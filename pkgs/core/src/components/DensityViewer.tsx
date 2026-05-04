@@ -7,6 +7,7 @@ import type { LatticeMatrix } from '../types.ts'
 import type { VolumeData } from '../types.ts'
 import { IsosurfaceRenderer } from './IsosurfaceRenderer.tsx'
 import { VolumeRenderer } from './VolumeRenderer.tsx'
+import { HeatmapRenderer } from './HeatmapRenderer.tsx'
 import { GlbPreviewRenderer } from './GlbPreviewRenderer.tsx'
 import { CrystalStructure } from './CrystalStructure.tsx'
 import { LatticeGizmo } from './LatticeGizmo.tsx'
@@ -68,6 +69,14 @@ interface DensityViewerProps {
   abcIsXyz?: boolean
   sliceStepSignRef?: MutableRefObject<number>
   useGpuVolume?: boolean
+  /** Render full volumetric heatmap (turbo) instead of an iso-surface. */
+  useHeatmap?: boolean
+  /** Heatmap density-emphasis exponent (>1 emphasizes high-density tail). */
+  heatmapGamma?: number
+  /** Densities below this fraction (0–1) contribute zero alpha. */
+  heatmapLowCutoff?: number
+  /** Ray-march sample count. */
+  heatmapStepCount?: number
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -102,6 +111,10 @@ export function DensityViewer({
   abcIsXyz,
   sliceStepSignRef,
   useGpuVolume,
+  useHeatmap,
+  heatmapGamma,
+  heatmapLowCutoff,
+  heatmapStepCount,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -148,9 +161,11 @@ export function DensityViewer({
 
         {glbUrl
           ? <GlbPreviewRenderer url={glbUrl} opacity={surfaceOpacityOverride ?? opacity} color={surfaceColor ?? undefined} />
-          : useGpuVolume
-            ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
-            : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
+          : useHeatmap
+            ? <HeatmapRenderer volume={volume} opacity={surfaceOpacityOverride ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+            : useGpuVolume
+              ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
+              : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
         }
         <CrystalStructure volume={volume} showAtoms={showAtoms} showAtomLabels={showAtomLabels} showAbcCell={showAbcCell} showXyzBox={showXyzBox} dashedLines={dashedLines} lineWidth={lineWidth} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} highlightElement={highlightElement} />
         {showSlice && sliceAxis !== undefined && sliceIndex !== undefined && (
