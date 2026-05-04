@@ -35,7 +35,7 @@ Out of scope:
 ### 1a. Brace expansion `{a,b}` — pure string, no network
 
 ```
-?s3=openathena/electrai/zarr/mp-2375705-{label,input}.zarr/
+?s3=openathena/electrai/zarr/mp-2375705-{input,label}.zarr/
 ```
 
 Expands to:

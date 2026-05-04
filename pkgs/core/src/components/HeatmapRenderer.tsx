@@ -16,6 +16,9 @@ interface HeatmapRendererProps {
   dataMin: number
   /** Max density value across the volume (in raw data units). */
   dataMax: number
+  /** Diverging mode: dataMin/dataMax are expected symmetric (-M..+M); zero maps to
+      turbo's green midpoint and alpha follows |val − 0.5| · 2 so near-zero is transparent. */
+  signed?: boolean
   /** Overall opacity multiplier (≈ how dense the cloud looks). */
   opacity: number
   /** Gamma applied to density before alpha mapping; >1 emphasizes high-density regions. */
@@ -98,6 +101,7 @@ uniform float uOpacity;
 uniform float uGamma;
 uniform float uStepCount;
 uniform float uLowCutoff;
+uniform int uSigned;
 uniform int uAtomCount;
 // xyz = fractional position, w = cart-space radius
 uniform vec4 uAtoms[MAX_ATOMS];
@@ -189,10 +193,15 @@ void main() {
     vec3 texCoord = fract(fracP);
     float val = clamp(texture(uVolume, texCoord).r, 0.0, 1.0);
 
-    if (val > uLowCutoff) {
+    // In signed (diverging) mode the texture stores values centered at 0.5
+    // (val=0.5 == raw 0). Color always uses val so 0 lands at turbo's mid-point;
+    // alpha gates on abs(val - 0.5) * 2 so the near-zero band is transparent.
+    float effVal = uSigned > 0 ? clamp(abs(val - 0.5) * 2.0, 0.0, 1.0) : val;
+
+    if (effVal > uLowCutoff) {
       vec3 col = turbo(val);
-      // Renormalize after subtracting low cutoff so val=1 still maps to alpha=1.
-      float v = clamp((val - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4), 0.0, 1.0);
+      // Renormalize after subtracting low cutoff so effVal=1 still maps to alpha=1.
+      float v = clamp((effVal - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4), 0.0, 1.0);
       float baseA = pow(v, uGamma) * uOpacity;
       float a = 1.0 - pow(max(1.0 - baseA, 0.0), dt / dtRef);
 
@@ -224,7 +233,7 @@ void main() {
 `
 
 export function HeatmapRenderer({
-  volume, dataMin, dataMax, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
+  volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
   clipAtoms = true,
   tiles: _tiles, tilePadding = 0, tileFade = 1,
 }: HeatmapRendererProps) {
@@ -296,6 +305,7 @@ export function HeatmapRenderer({
     uGamma: { value: gamma },
     uStepCount: { value: stepCount },
     uLowCutoff: { value: lowCutoff },
+    uSigned: { value: signed ? 1 : 0 },
     uAtomCount: { value: effectiveAtomCount },
     uAtoms: { value: atomsArray },
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,6 +321,7 @@ export function HeatmapRenderer({
     mat.uniforms.uGamma.value = gamma
     mat.uniforms.uStepCount.value = stepCount
     mat.uniforms.uLowCutoff.value = lowCutoff
+    mat.uniforms.uSigned.value = signed ? 1 : 0
     mat.uniforms.uCartToFrac.value.copy(cartToFrac)
     mat.uniforms.uFracToCart.value.copy(fracToCartM)
     mat.uniforms.uVolume.value = texture

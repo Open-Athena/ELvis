@@ -233,7 +233,7 @@ export function DiffSources({
     <div style={{ borderBottom: '1px solid #333', padding: '6px 16px 8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <span style={{ color: '#aaa', fontSize: 12, fontWeight: 600 }}>
-          Diff sources <span style={{ color: '#666', fontWeight: 400 }}>|v0 − v1|</span>
+          Diff sources <span style={{ color: '#666', fontWeight: 400 }}>v0 − v1</span>
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
@@ -259,7 +259,7 @@ export function DiffSources({
             type="button"
             onClick={resetAll}
             disabled={!anyOverride}
-            title="Reset both rows to auto-resolved (label / input)"
+            title="Reset both rows to auto-resolved (input / label)"
             style={{
               padding: '2px 6px', fontSize: 10, background: 'transparent',
               border: '1px solid #444', borderRadius: 3,
@@ -277,8 +277,8 @@ export function DiffSources({
         <DebouncedInput
           value={s3Pattern}
           onCommit={onS3PatternChange}
-          placeholder="bucket/key/foo-{label,input}.zarr/"
-          title={s3Pattern ? `Pattern: ${s3Pattern}` : 'Optional shorthand pattern. e.g. openathena/electrai/zarr/mp-X-{label,input}.zarr/'}
+          placeholder="bucket/key/foo-{input,label}.zarr/"
+          title={s3Pattern ? `Pattern: ${s3Pattern}` : 'Optional shorthand pattern. e.g. openathena/electrai/zarr/mp-X-{input,label}.zarr/'}
           style={{ flex: 1 }}
         />
         <button

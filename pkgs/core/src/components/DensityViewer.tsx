@@ -73,6 +73,10 @@ interface DensityViewerProps {
   useGpuVolume?: boolean
   /** Render full volumetric heatmap (turbo) instead of an iso-surface. */
   useHeatmap?: boolean
+  /** Signed (diverging) heatmap centered at zero — used for diff volumes. Maps
+      [-M, +M] symmetrically so 0 sits at turbo's green midpoint and alpha follows
+      |value|/M (near-zero is transparent). */
+  heatmapSigned?: boolean
   /** Heatmap density-emphasis exponent (>1 emphasizes high-density tail). */
   heatmapGamma?: number
   /** Densities below this fraction (0–1) contribute zero alpha. */
@@ -116,6 +120,7 @@ export function DensityViewer({
   sliceStepSignRef,
   useGpuVolume,
   useHeatmap,
+  heatmapSigned,
   heatmapGamma,
   heatmapLowCutoff,
   heatmapStepCount,
@@ -140,7 +145,15 @@ export function DensityViewer({
     return new Vector3(c[0] + 15, c[1] + 10, c[2] + 15)
   }, [volume.lattice])
 
-  const dataRange = useMemo(() => volumeMinMax(volume.grid.data), [volume.grid.data])
+  const dataRange = useMemo(() => {
+    const r = volumeMinMax(volume.grid.data)
+    if (heatmapSigned) {
+      // Symmetrize around 0 so green sits at zero in the diverging colormap.
+      const M = Math.max(Math.abs(r.min), Math.abs(r.max)) || 1
+      return { min: -M, max: M }
+    }
+    return r
+  }, [volume.grid.data, heatmapSigned])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -169,7 +182,7 @@ export function DensityViewer({
         {glbUrl
           ? <GlbPreviewRenderer url={glbUrl} opacity={surfaceOpacityOverride ?? opacity} color={surfaceColor ?? undefined} />
           : useHeatmap
-            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} opacity={surfaceOpacityOverride ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
             : useGpuVolume
               ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
               : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
@@ -200,6 +213,7 @@ export function DensityViewer({
         <HeatmapLegend
           dataMin={dataRange.min}
           dataMax={dataRange.max}
+          signed={heatmapSigned}
           gamma={heatmapGamma ?? 2.5}
           lowCutoff={heatmapLowCutoff ?? 0}
           units={heatmapUnits}

@@ -268,13 +268,14 @@ export default function App() {
     return null
   }, [s3Expansion])
   // Default chain for each operand: explicit override > `?s3=` brace expansion > manifest auto.
+  // Convention: v0 = input (SAD, "before"), v1 = label (DFT, "after"). Diff is `|v0 − v1|`.
   const v0AutoUrl = useMemo(() => {
     if (s3Expansion?.kind === 'brace') return s3Expansion.v0
-    return currentRecord ? (resolveLoadUrl(currentRecord, 'label', 'zarr') ?? '') : ''
+    return currentRecord ? (resolveLoadUrl(currentRecord, 'input', 'zarr') ?? '') : ''
   }, [s3Expansion, currentRecord])
   const v1AutoUrl = useMemo(() => {
     if (s3Expansion?.kind === 'brace') return s3Expansion.v1
-    return currentRecord ? (resolveLoadUrl(currentRecord, 'input', 'zarr') ?? '') : ''
+    return currentRecord ? (resolveLoadUrl(currentRecord, 'label', 'zarr') ?? '') : ''
   }, [s3Expansion, currentRecord])
   const [currentVolumeId, setCurrentVolumeIdRaw] = useState<string | null>(
     () => sessionStorage.getItem('elvis-active-volume'),
@@ -1175,9 +1176,9 @@ export default function App() {
     setFetchStatus('Loading v0 + v1 for diff...')
     try {
       // Resolution: v0/v1 overrides take precedence; otherwise auto-derive from record.
-      // Convention: v0 = label (DFT ground truth), v1 = input (SAD guess).
-      const v0Resolved = v0Override || (record ? resolveLoadUrl(record, 'label', 'zarr') : undefined)
-      const v1Resolved = v1Override || (record ? resolveLoadUrl(record, 'input', 'zarr') : undefined)
+      // Convention: v0 = input (SAD, "before"), v1 = label (DFT, "after").
+      const v0Resolved = v0Override || (record ? resolveLoadUrl(record, 'input', 'zarr') : undefined)
+      const v1Resolved = v1Override || (record ? resolveLoadUrl(record, 'label', 'zarr') : undefined)
       if (!v0Resolved || !v1Resolved) {
         setFetchStatus('Diff requires both v0 and v1 Zarr URLs')
         return
@@ -1193,7 +1194,10 @@ export default function App() {
       }
       const n = a.grid.data.length
       const data = new Float32Array(n)
-      for (let i = 0; i < n; i++) data[i] = Math.abs(a.grid.data[i] - b.grid.data[i])
+      // Signed diff: positive where v0 (input/before) > v1 (label/after) — i.e., DFT
+      // *removed* density. Negative where DFT *added* density. The diverging colormap
+      // (turbo: blue → green → red) puts blue at negative, green at zero, red at positive.
+      for (let i = 0; i < n; i++) data[i] = a.grid.data[i] - b.grid.data[i]
       // Structure (atoms, lattice) is taken from v0.
       const id = record?.id ?? 'diff'
       const diff: VolumeData = {
@@ -1472,7 +1476,7 @@ export default function App() {
                   label={
                     srcRole === 'input' ? 'Input (SAD)'
                     : srcRole === 'diff'
-                      ? (v0Url || v1Url || s3Pattern) ? '|v0 − v1|' : '|Label − Input|'
+                      ? (v0Url || v1Url || s3Pattern) ? 'v0 − v1' : 'Input − Label'
                       : 'Label (DFT)'
                   }
                   volume={primaryFile.data}
@@ -1499,6 +1503,7 @@ export default function App() {
                   sliceStepSignRef={sliceStepSignRef}
                   useGpuVolume={useGpuVolume}
                   useHeatmap={useHeatmap}
+                  heatmapSigned={srcRole === 'diff'}
                   heatmapGamma={heatmapGamma}
                   heatmapLowCutoff={heatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}

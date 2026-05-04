@@ -4,6 +4,8 @@ import { turbo } from '../utils/colormap.ts'
 interface HeatmapLegendProps {
   dataMin: number
   dataMax: number
+  /** Diverging mode: bar centers at 0; alpha follows |val − 0.5| · 2 to mirror the shader. */
+  signed?: boolean
   gamma: number
   lowCutoff: number
   units?: string
@@ -23,21 +25,22 @@ function formatValue(v: number): string {
   return v.toFixed(1)
 }
 
-export function HeatmapLegend({ dataMin, dataMax, gamma, lowCutoff, units }: HeatmapLegendProps) {
+export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, units }: HeatmapLegendProps) {
   const gradient = useMemo(() => {
     // CSS linear-gradient: bottom (0%, low) → top (100%, high). Alpha follows the
-    // shader's `pow(v, gamma)` curve so the legend visually matches the rendering
-    // (low-density region fades into the background just as it does in the volume).
+    // shader's `pow(v, gamma)` curve so the legend visually matches the rendering.
+    // In signed mode the alpha gates on `|v − 0.5| · 2` so the near-zero band fades.
     const stops: string[] = []
     for (let i = 0; i <= N_STOPS; i++) {
       const v = i / N_STOPS
       const [r, g, b] = turbo(v)
-      const norm = Math.max(0, (v - lowCutoff) / Math.max(1 - lowCutoff, 1e-4))
-      const alpha = v <= lowCutoff ? 0 : Math.pow(Math.min(1, norm), gamma)
+      const effV = signed ? Math.abs(v - 0.5) * 2 : v
+      const norm = Math.max(0, (effV - lowCutoff) / Math.max(1 - lowCutoff, 1e-4))
+      const alpha = effV <= lowCutoff ? 0 : Math.pow(Math.min(1, norm), gamma)
       stops.push(`rgba(${r.toFixed(0)}, ${g.toFixed(0)}, ${b.toFixed(0)}, ${alpha.toFixed(3)}) ${(v * 100).toFixed(1)}%`)
     }
     return `linear-gradient(to top, ${stops.join(', ')})`
-  }, [gamma, lowCutoff])
+  }, [signed, gamma, lowCutoff])
 
   const ticks = useMemo(() => {
     const out: { fraction: number; value: number }[] = []
