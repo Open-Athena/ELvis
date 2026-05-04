@@ -8,6 +8,7 @@ import {
   SliceViewer,
   VolumeGallery,
   URLInput,
+  DiffSources,
   AWSCredentialsModal,
   SizeConfirmModal,
   Settings,
@@ -92,6 +93,13 @@ function computeDensityQuantiles(data: Float32Array, nQuantiles = 201, sampleCap
 const boolTrueParam: Param<boolean> = {
   encode: (v) => v ? undefined : '',
   decode: (e) => e === undefined,
+}
+
+// Optional tri-state bool: undefined (absent), true ('1'), false ('0').
+// Lets callers compute a context-dependent default instead of hardwiring one.
+const optBoolParam: Param<boolean | undefined> = {
+  encode: (v) => v === undefined ? undefined : v ? '1' : '0',
+  decode: (e) => e === undefined ? undefined : e !== '0',
 }
 
 // Camera state: theta°, phi°, zoom, roll° (roll optional, defaults to 0)
@@ -210,7 +218,10 @@ export default function App() {
   const [showXyzBox, setShowXyzBox] = useUrlState('xb', boolParam)
   const [showAtomLabels, setShowAtomLabels] = useUrlState('al', boolTrueParam)
   const [dashedLines, setDashedLines] = useUrlState('dl', boolParam)
-  const [showSlice, setShowSlice] = useUrlState('sl', boolTrueParam)
+  // Tri-state: ?sl=1 forces on, ?sl=0 forces off, absent → context-dependent default
+  // (off in diff view since the slice fights the volumetric heatmap; on otherwise as a
+  // free 2D context map). Computed below once srcRole is in scope.
+  const [showSliceUrl, setShowSlice] = useUrlState('sl', optBoolParam)
   const [sliceAxis, setSliceAxis] = useUrlState('sa', intParam(2)) as [0 | 1 | 2, (v: 0 | 1 | 2) => void]
   const [sliceIndex, setSliceIndex] = useUrlState('si', optIntParam, { debounce: 300 })
   const [orbitDeg, setOrbitDeg] = useUrlState('od', intParam(30))
@@ -229,6 +240,29 @@ export default function App() {
   const [materialId, setMaterialId] = useUrlState('m', stringParam(DEFAULT_MP_ID), { push: true })
   type SrcRole = 'input' | 'label' | 'diff'
   const [srcRole, setSrcRole] = useUrlState('src', stringParam('label')) as [SrcRole, (v: SrcRole) => void]
+  // Diff mode operand overrides (only meaningful when src=diff). Empty = auto-resolve from `m=`.
+  const [v0Url, setV0Url] = useUrlState('v0', stringParam(''))
+  const [v1Url, setV1Url] = useUrlState('v1', stringParam(''))
+  // Effective slice visibility resolves the tri-state: explicit URL wins, else default
+  // depends on srcRole (off in diff because the slice fights the volumetric heatmap).
+  const showSlice = showSliceUrl ?? (srcRole !== 'diff')
+  // Auto-resolve label/input URLs from the current material — used as DiffSources defaults
+  // and as fallbacks when v0Url/v1Url overrides are empty.
+  const currentRecord = useMemo<MaterialRecord | null>(() => {
+    if (!materialId) return null
+    return MATERIALS_MANIFEST.records.find(r =>
+      r.id === materialId ||
+      Object.values(r.datasets).some(d => d?.task_ids?.includes(materialId)),
+    ) ?? null
+  }, [materialId])
+  const v0AutoUrl = useMemo(
+    () => currentRecord ? (resolveLoadUrl(currentRecord, 'label', 'zarr') ?? '') : '',
+    [currentRecord],
+  )
+  const v1AutoUrl = useMemo(
+    () => currentRecord ? (resolveLoadUrl(currentRecord, 'input', 'zarr') ?? '') : '',
+    [currentRecord],
+  )
   const [currentVolumeId, setCurrentVolumeIdRaw] = useState<string | null>(
     () => sessionStorage.getItem('elvis-active-volume'),
   )
@@ -536,15 +570,11 @@ export default function App() {
       )
       if (!record) return
       if (next === 'diff') {
-        if (!useZarr) {
-          setFetchStatus('Diff view requires Zarr mode (Shift+Z)')
-          return
-        }
-        loadDiff(record)
-      } else {
-        const url = resolveLoadUrl(record, next, useZarr ? 'zarr' : 'chgcar')
-        if (url) handleUrlSubmit(url)
+        // Diff load is driven by the srcRole effect; nothing to do here.
+        return
       }
+      const url = resolveLoadUrl(record, next, useZarr ? 'zarr' : 'chgcar')
+      if (url) handleUrlSubmit(url)
     },
   })
   useAction('view:toggle-color-by-density', {
@@ -1051,7 +1081,9 @@ export default function App() {
       return null
     },
     staleTime: Infinity,
-    enabled: files.length === 0,
+    // Skip when src=diff: the diff effect resolves+loads operands directly via Zarr,
+    // and a parallel single-file fetch here would race and overwrite that result.
+    enabled: files.length === 0 && srcRole !== 'diff',
   })
 
   // Populate files from initial query result
@@ -1120,35 +1152,43 @@ export default function App() {
     setFetchStatus(null)
   }, [setCurrentVolumeId])
 
-  const loadDiff = useCallback(async (record: MaterialRecord) => {
+  const loadDiff = useCallback(async (
+    record: MaterialRecord | null,
+    v0Override?: string,
+    v1Override?: string,
+  ) => {
     setUrlLoading(true)
     setFiles([])
-    setFetchStatus('Loading input + label for diff...')
+    setFetchStatus('Loading v0 + v1 for diff...')
     try {
-      const inputUrl = resolveLoadUrl(record, 'input', 'zarr')
-      const labelUrl = resolveLoadUrl(record, 'label', 'zarr')
-      if (!inputUrl || !labelUrl) {
-        setFetchStatus('Diff requires both input and label Zarr URLs')
+      // Resolution: v0/v1 overrides take precedence; otherwise auto-derive from record.
+      // Convention: v0 = label (DFT ground truth), v1 = input (SAD guess).
+      const v0Resolved = v0Override || (record ? resolveLoadUrl(record, 'label', 'zarr') : undefined)
+      const v1Resolved = v1Override || (record ? resolveLoadUrl(record, 'input', 'zarr') : undefined)
+      if (!v0Resolved || !v1Resolved) {
+        setFetchStatus('Diff requires both v0 and v1 Zarr URLs')
         return
       }
-      const [inp, lbl] = await Promise.all([
-        fetchZarrVolume(s3UriToHttps(inputUrl)),
-        fetchZarrVolume(s3UriToHttps(labelUrl)),
+      const [a, b] = await Promise.all([
+        fetchZarrVolume(s3UriToHttps(v0Resolved)),
+        fetchZarrVolume(s3UriToHttps(v1Resolved)),
       ])
-      const dInp = inp.grid.dims, dLbl = lbl.grid.dims
-      if (dInp[0] !== dLbl[0] || dInp[1] !== dLbl[1] || dInp[2] !== dLbl[2]) {
-        setFetchStatus(`Diff dim mismatch: input ${dInp.join('×')} vs label ${dLbl.join('×')}`)
+      const dA = a.grid.dims, dB = b.grid.dims
+      if (dA[0] !== dB[0] || dA[1] !== dB[1] || dA[2] !== dB[2]) {
+        setFetchStatus(`Diff dim mismatch: v0 ${dA.join('×')} vs v1 ${dB.join('×')}`)
         return
       }
-      const n = lbl.grid.data.length
+      const n = a.grid.data.length
       const data = new Float32Array(n)
-      for (let i = 0; i < n; i++) data[i] = Math.abs(lbl.grid.data[i] - inp.grid.data[i])
+      for (let i = 0; i < n; i++) data[i] = Math.abs(a.grid.data[i] - b.grid.data[i])
+      // Structure (atoms, lattice) is taken from v0.
+      const id = record?.id ?? 'diff'
       const diff: VolumeData = {
-        ...lbl,
-        title: `${record.id}/diff`,
-        grid: { dims: lbl.grid.dims, data },
+        ...a,
+        title: `${id}/diff`,
+        grid: { dims: a.grid.dims, data },
       }
-      handleLoad(diff, `${record.id}-diff`)
+      handleLoad(diff, `${id}-diff`)
       setFetchStatus(null)
     } catch (e) {
       setFetchStatus(`Diff failed: ${e instanceof Error ? e.message : String(e)}`)
@@ -1156,6 +1196,27 @@ export default function App() {
       setUrlLoading(false)
     }
   }, [handleLoad])
+
+  // Refs let the diff-effect re-fire only on srcRole/url changes, not on every loadDiff
+  // identity change (which happens whenever handleLoad's deps change).
+  const loadDiffRef = useRef(loadDiff)
+  loadDiffRef.current = loadDiff
+
+  // Drive `?src=diff` from URL: when srcRole becomes 'diff' (initial mount or via hotkey),
+  // or when v0/v1/record change while in diff mode, (re)fetch and compute the diff volume.
+  useEffect(() => {
+    if (srcRole !== 'diff') return
+    if (!useZarr) {
+      setFetchStatus('Diff view requires Zarr mode (Shift+Z)')
+      return
+    }
+    const haveOverrides = !!(v0Url && v1Url)
+    if (!currentRecord && !haveOverrides) {
+      if (v0Url || v1Url) setFetchStatus('Diff requires both v0 and v1 URLs')
+      return
+    }
+    loadDiffRef.current(currentRecord, v0Url || undefined, v1Url || undefined)
+  }, [srcRole, currentRecord, v0Url, v1Url, useZarr])
 
   const handleUrlSubmit = useCallback(async (url: string) => {
     setUrlLoading(true)
@@ -1387,7 +1448,12 @@ export default function App() {
                 />
               ) : (
                 <DensityViewer
-                  label={srcRole === 'input' ? 'Input (SAD)' : srcRole === 'diff' ? '|Label − Input|' : 'Label (DFT)'}
+                  label={
+                    srcRole === 'input' ? 'Input (SAD)'
+                    : srcRole === 'diff'
+                      ? ((v0Url && v0Url.length > 0) || (v1Url && v1Url.length > 0)) ? '|v0 − v1|' : '|Label − Input|'
+                      : 'Label (DFT)'
+                  }
                   volume={primaryFile.data}
                   isoLevel={effectiveIsoLevel}
                   opacity={opacity}
@@ -1488,6 +1554,16 @@ export default function App() {
           onLineWidthChange={setLineWidth}
         />
         <URLInput onSubmit={handleUrlSubmit} loading={urlLoading} />
+        {srcRole === 'diff' && (
+          <DiffSources
+            v0Url={v0Url ?? ''}
+            v1Url={v1Url ?? ''}
+            v0Default={v0AutoUrl}
+            v1Default={v1AutoUrl}
+            onV0Change={setV0Url}
+            onV1Change={setV1Url}
+          />
+        )}
         {fetchStatus && (
           <div style={{
             padding: '4px 16px',
