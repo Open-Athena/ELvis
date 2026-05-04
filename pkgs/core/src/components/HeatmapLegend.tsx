@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { turbo } from '../utils/colormap.ts'
+import { turbo, diverging } from '../utils/colormap.ts'
 
 interface HeatmapLegendProps {
   dataMin: number
@@ -33,7 +33,7 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
     const stops: string[] = []
     for (let i = 0; i <= N_STOPS; i++) {
       const v = i / N_STOPS
-      const [r, g, b] = turbo(v)
+      const [r, g, b] = signed ? diverging(v) : turbo(v)
       const effV = signed ? Math.abs(v - 0.5) * 2 : v
       const norm = Math.max(0, (effV - lowCutoff) / Math.max(1 - lowCutoff, 1e-4))
       const alpha = effV <= lowCutoff ? 0 : Math.pow(Math.min(1, norm), gamma)

@@ -1194,10 +1194,10 @@ export default function App() {
       }
       const n = a.grid.data.length
       const data = new Float32Array(n)
-      // Signed diff: positive where v0 (input/before) > v1 (label/after) — i.e., DFT
-      // *removed* density. Negative where DFT *added* density. The diverging colormap
-      // (turbo: blue → green → red) puts blue at negative, green at zero, red at positive.
-      for (let i = 0; i < n; i++) data[i] = a.grid.data[i] - b.grid.data[i]
+      // Signed diff using github-style convention: diff = v1 − v0 (after − before).
+      // Positive ⟹ DFT *added* density (cool/green, like a "+ added" hunk).
+      // Negative ⟹ DFT *removed* density (warm/red, like a "− removed" hunk).
+      for (let i = 0; i < n; i++) data[i] = b.grid.data[i] - a.grid.data[i]
       // Structure (atoms, lattice) is taken from v0.
       const id = record?.id ?? 'diff'
       const diff: VolumeData = {
@@ -1476,7 +1476,7 @@ export default function App() {
                   label={
                     srcRole === 'input' ? 'Input (SAD)'
                     : srcRole === 'diff'
-                      ? (v0Url || v1Url || s3Pattern) ? 'v0 − v1' : 'Input − Label'
+                      ? (v0Url || v1Url || s3Pattern) ? 'v1 − v0' : 'Label − Input'
                       : 'Label (DFT)'
                   }
                   volume={primaryFile.data}

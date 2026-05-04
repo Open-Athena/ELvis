@@ -125,6 +125,18 @@ float chebyshevDist(vec3 p) {
              max(max(0.0, -p.z), max(p.z - 1.0, 0.0))));
 }
 
+// Diverging colormap for signed diffs: green (added) for val > 0.5, red (removed)
+// for val < 0.5. Critically, color goes to (0,0,0) at val=0.5 so ray-march accumulation
+// near zero stays invisible regardless of alpha — fixes the issue where turbo's
+// yellow-green midpoint leaked visible color into low-magnitude regions.
+vec3 diverging(float val) {
+  float u = (val - 0.5) * 2.0;        // [-1, 1]
+  float mag = pow(abs(u), 0.65);      // emphasize mid-range, still 0 at u=0
+  vec3 pos = vec3(0.10, 0.95, 0.30);  // green for "DFT added density"
+  vec3 neg = vec3(1.00, 0.20, 0.10);  // red for "DFT removed density"
+  return mag * (u >= 0.0 ? pos : neg);
+}
+
 vec3 turbo(float x) {
   const vec4 kRedVec4 = vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
   const vec4 kGreenVec4 = vec4(0.09140261, 2.19418839, 4.84296658, -14.18503333);
@@ -199,7 +211,7 @@ void main() {
     float effVal = uSigned > 0 ? clamp(abs(val - 0.5) * 2.0, 0.0, 1.0) : val;
 
     if (effVal > uLowCutoff) {
-      vec3 col = turbo(val);
+      vec3 col = uSigned > 0 ? diverging(val) : turbo(val);
       // Renormalize after subtracting low cutoff so effVal=1 still maps to alpha=1.
       float v = clamp((effVal - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4), 0.0, 1.0);
       float baseA = pow(v, uGamma) * uOpacity;

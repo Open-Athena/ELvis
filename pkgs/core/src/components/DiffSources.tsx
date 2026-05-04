@@ -233,7 +233,7 @@ export function DiffSources({
     <div style={{ borderBottom: '1px solid #333', padding: '6px 16px 8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <span style={{ color: '#aaa', fontSize: 12, fontWeight: 600 }}>
-          Diff sources <span style={{ color: '#666', fontWeight: 400 }}>v0 − v1</span>
+          Diff sources <span style={{ color: '#666', fontWeight: 400 }}>v1 − v0</span>
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           <button

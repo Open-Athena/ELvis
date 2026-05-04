@@ -36,3 +36,17 @@ export function turbo(t: number): [number, number, number] {
     Math.max(0, Math.min(255, b * 255)),
   ]
 }
+
+/**
+ * Diverging colormap for signed diffs: green for val>0.5 ("added"), red for val<0.5
+ * ("removed"), literal black at val=0.5. Mirrors the `diverging` GLSL in HeatmapRenderer.
+ */
+export function diverging(val: number): [number, number, number] {
+  const v = Math.max(0, Math.min(1, isFinite(val) ? val : 0.5))
+  const u = (v - 0.5) * 2
+  const mag = Math.pow(Math.abs(u), 0.65)
+  const pos: [number, number, number] = [0.10, 0.95, 0.30]
+  const neg: [number, number, number] = [1.00, 0.20, 0.10]
+  const c = u >= 0 ? pos : neg
+  return [mag * c[0] * 255, mag * c[1] * 255, mag * c[2] * 255]
+}
