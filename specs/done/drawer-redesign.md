@@ -44,6 +44,25 @@ Three options were considered (per task description):
 
 **Pick light-touch.** Below assumes that.
 
+**Shipped 2026-05-06** as the light-touch path:
+- `pkgs/core/src/components/DrawerSection.tsx` — shared collapsible section
+  with icon, accent stripe, badge, localStorage-persistent collapse, and
+  one-shot legacy-key migration.
+- `lucide-react` adopted for the icon set (~+3 KB gz total for 9 icons).
+- All 6 `Controls.tsx` sections + the 3 standalone components
+  (`VolumeGallery`, `Settings`, `URLInput`) + the inline Examples
+  `<details>` migrated to `DrawerSection`.
+- Hotkeys via `useAction`: `[` collapse-all, `]` expand-all, `;`
+  focus-last (originally `\` per spec, but conflicted with the existing
+  `\f t` chord — see commit cd550ee).
+- Reduced-motion + `:focus-visible` styling included in the CSS module.
+
+Deferred (out of scope as planned):
+- Mid-touch / heavy-touch options.
+- Light-mode accent CSS-var split (LM theme hasn't landed).
+- Section reordering / drag-and-drop.
+- Compact mode toggle.
+
 ### 1. Unify heading components
 
 Extract a shared `<DrawerSection>` component (likely under `pkgs/core/src/components/DrawerSection.tsx`) that all 10 sections use. Props:
