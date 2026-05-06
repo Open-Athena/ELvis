@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { Atom, Camera, Eye, Flame, Grid3x3, Layers } from 'lucide-react'
 import { getElement } from '../utils/elements.ts'
 import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
+import { DrawerSection } from './DrawerSection.tsx'
 import styles from './Controls.module.css'
+
+const ICON_SIZE = 16
+const ACCENT = {
+  surface: '#5fb3d4',
+  heatmap: '#ff8a3d',
+  display: '#a78bfa',
+  tiling: '#7dd3a1',
+  camera: '#f5a3a3',
+  slice: '#f0c674',
+}
 
 const ResetIcon = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -153,6 +165,8 @@ export function Controls({
 }: ControlsProps) {
   const tp = tilePadding ?? 0
   const hasTiling = tp > 0
+  // Bump forceOpenGen when Tiling becomes active so the section auto-opens once.
+  const tilingActiveGen = useMemo(() => hasTiling ? Date.now() : 0, [hasTiling])
 
   // Element legend brushing: pin via click (sticky), hover otherwise.
   const [pinned, setPinned] = useState<string | null>(null)
@@ -247,9 +261,7 @@ export function Controls({
         </div>
       )}
 
-      <details className={styles.section} open>
-        <summary className={styles.sectionTitle}>Surface</summary>
-        <div className={styles.sectionBody}>
+      <DrawerSection id="surface" title="Surface" icon={<Atom size={ICON_SIZE} />} accent={ACCENT.surface} defaultOpen>
           <div className={styles.controlLabel}>
             <div className={styles.sliderHeader}>
               <span>
@@ -314,13 +326,10 @@ export function Controls({
               className={styles.slider}
             />
           </div>
-        </div>
-      </details>
+        </DrawerSection>
 
       {useHeatmap && onHeatmapGammaChange && onHeatmapLowCutoffChange && onHeatmapStepCountChange && (
-        <details className={styles.section} open>
-          <summary className={styles.sectionTitle}>Heatmap</summary>
-          <div className={styles.sectionBody}>
+        <DrawerSection id="heatmap" title="Heatmap" icon={<Flame size={ICON_SIZE} />} accent={ACCENT.heatmap} defaultOpen={false}>
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
                 <span>Gamma: {heatmapGamma.toFixed(2)}</span>
@@ -387,13 +396,10 @@ export function Controls({
                 className={styles.slider}
               />
             </div>
-          </div>
-        </details>
+        </DrawerSection>
       )}
 
-      <details className={styles.section} open>
-        <summary className={styles.sectionTitle}>Display</summary>
-        <div className={styles.sectionBody}>
+      <DrawerSection id="display" title="Display" icon={<Eye size={ICON_SIZE} />} accent={ACCENT.display} defaultOpen>
           <label className={styles.toggle}>
             <input type="checkbox" checked={showAtoms} onChange={e => onShowAtomsChange(e.target.checked)} />
             Show atoms
@@ -418,13 +424,10 @@ export function Controls({
             <input type="checkbox" checked={dashedLines} onChange={e => onDashedLinesChange(e.target.checked)} />
             Dashed outlines
           </label>
-        </div>
-      </details>
+        </DrawerSection>
 
       {onTilePaddingChange && (
-        <details className={styles.section} open={hasTiling}>
-          <summary className={styles.sectionTitle}>Tiling</summary>
-          <div className={styles.sectionBody}>
+        <DrawerSection id="tiling" title="Tiling" icon={<Grid3x3 size={ICON_SIZE} />} accent={ACCENT.tiling} defaultOpen={false} forceOpenGen={tilingActiveGen}>
             <label className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
                 <span>Padding: {tp.toFixed(2)}</span>
@@ -461,13 +464,10 @@ export function Controls({
                 />
               </label>
             )}
-          </div>
-        </details>
+        </DrawerSection>
       )}
 
-      <details className={styles.section} open>
-        <summary className={styles.sectionTitle}>Camera</summary>
-        <div className={styles.sectionBody}>
+      <DrawerSection id="camera" title="Camera" icon={<Camera size={ICON_SIZE} />} accent={ACCENT.camera} defaultOpen>
           <label className={styles.toggle}>
             <input type="checkbox" checked={orbitDeg > 0} onChange={e => onOrbitDegChange(e.target.checked ? 90 : 0)} />
             Orbit step{orbitDeg > 0 && <>:
@@ -545,12 +545,9 @@ export function Controls({
               {Math.abs(cam[3]) >= 0.05 && <span title="Roll">↻ {fmtAngle(cam[3])}°</span>}
             </div>
           )}
-        </div>
-      </details>
+        </DrawerSection>
 
-      <details className={styles.section} open>
-        <summary className={styles.sectionTitle}>Slice</summary>
-        <div className={styles.sectionBody}>
+      <DrawerSection id="slice" title="Slice" icon={<Layers size={ICON_SIZE} />} accent={ACCENT.slice} defaultOpen={false}>
           <label className={styles.toggle}>
             <input type="checkbox" checked={showSlice} onChange={e => onShowSliceChange(e.target.checked)} />
             2D Slice
@@ -616,8 +613,7 @@ export function Controls({
               </label>
             </>
           )}
-        </div>
-      </details>
+      </DrawerSection>
     </div>
   )
 }
