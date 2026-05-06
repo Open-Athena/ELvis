@@ -10,7 +10,12 @@ Two related gaps surfaced while testing the new `?src=diff` + `?heat=1` view on 
 ## Goals
 
 - **Phase 1 (this spec):** make diff sources first-class and configurable; add a quantitative legend to the heatmap.
-- **Phase 2 (deferred):** signed (diverging) diff colormaps, multiple colormap choice, full color-scale editor a la `~/c/jc-taxes/www/src/GradientEditor.tsx` — punt until we have a 2nd consumer.
+- **Phase 2 (shipped 2026-05-04):** signed (diverging) diff colormap landed via the
+  green/red `diverging()` map in `colormap.ts` + matching GLSL in `HeatmapRenderer`.
+  Convention: `diff = v1 − v0` (after − before); positive (DFT *added* density) →
+  green, negative (DFT *removed*) → red, literal black at zero so ray-march
+  accumulation can't leak hue into the near-zero band. Multi-colormap choice and a
+  full color-scale editor remain deferred — punt until we have a 2nd consumer.
 
 Out of scope: `?src=predicted` itself (separate spec), drawer reorg / icon rail (separate item per `#4` discussion).
 
