@@ -26,7 +26,7 @@ const STORAGE_KEY_LEGACY: Record<string, string> = {
   // One-shot migration: read old key, write new, delete old.
   gallery: 'elvis-gallery-collapsed',
   settings: 'elvis-settings-collapsed',
-  url: 'elvis-url-collapsed',
+  url: 'elvis-url-input-collapsed',
   examples: 'elvis-examples-open',
 }
 

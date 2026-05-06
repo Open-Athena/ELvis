@@ -109,6 +109,9 @@ importers:
       aws-static-sso:
         specifier: https://github.com/runsascoded/aws-static-sso#13075f68e82e86ed23156764922fb7333c912eea&path:/client
         version: https://codeload.github.com/runsascoded/aws-static-sso/tar.gz/13075f68e82e86ed23156764922fb7333c912eea#path:/client
+      lucide-react:
+        specifier: ^1.14.0
+        version: 1.14.0(react@19.2.4)
       react:
         specifier: ^19.1.1
         version: 19.2.4

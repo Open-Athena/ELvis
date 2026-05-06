@@ -5,18 +5,9 @@ interface URLInputProps {
   loading?: boolean
 }
 
+/** URL-input form. Wrap in `<DrawerSection id="url" title="Load from URL" …>`. */
 export function URLInput({ onSubmit, loading }: URLInputProps) {
   const [value, setValue] = useState('')
-  const [collapsed, setCollapsed] = useState(() => {
-    return sessionStorage.getItem('elvis-url-input-collapsed') === 'true'
-  })
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed(prev => {
-      const next = !prev
-      sessionStorage.setItem('elvis-url-input-collapsed', String(next))
-      return next
-    })
-  }, [])
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault()
@@ -26,27 +17,7 @@ export function URLInput({ onSubmit, loading }: URLInputProps) {
   }, [value, onSubmit])
 
   return (
-    <div style={{ borderBottom: '1px solid #333' }}>
-      <button
-        onClick={toggleCollapsed}
-        style={{
-          width: '100%',
-          padding: '8px 16px',
-          background: 'transparent',
-          border: 'none',
-          color: '#aaa',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <span>Load from URL</span>
-        <span style={{ fontSize: 10 }}>{collapsed ? '\u25b6' : '\u25bc'}</span>
-      </button>
-      {!collapsed && <form onSubmit={handleSubmit} style={{ padding: '0 16px 8px' }}>
+    <form onSubmit={handleSubmit}>
       <div style={{ display: 'flex', gap: 6 }}>
         <input
           type="text"
@@ -79,10 +50,9 @@ export function URLInput({ onSubmit, loading }: URLInputProps) {
             opacity: loading || !value.trim() ? 0.5 : 1,
           }}
         >
-          {loading ? 'Loading\u2026' : 'Load'}
+          {loading ? 'Loading…' : 'Load'}
         </button>
       </div>
-      </form>}
-    </div>
+    </form>
   )
 }

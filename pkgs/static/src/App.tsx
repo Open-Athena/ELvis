@@ -22,7 +22,9 @@ import {
   DEFAULT_RAMP,
   fetchZarrVolume,
   parseS3Pattern,
+  DrawerSection,
 } from '@elvis/core'
+import { Database, Link2, Settings2, Sparkles } from 'lucide-react'
 import { ShortcutsModal, Omnibar, SequenceModal, LookupModal, SpeedDial, ModeIndicator, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
 import type { SpeedDialAction } from 'use-kbd'
 import 'use-kbd/styles.css'
@@ -286,10 +288,8 @@ export default function App() {
     else sessionStorage.removeItem('elvis-active-volume')
   }, [])
   const [galleryRefreshKey, setGalleryRefreshKey] = useState(0)
+  const [cachedCount, setCachedCount] = useState(0)
   const [cachedMpIds, setCachedMpIds] = useState<Set<string>>(new Set())
-  const [examplesOpen, setExamplesOpen] = useState(() => {
-    return sessionStorage.getItem('elvis-examples-open') === 'true'
-  })
   const [urlLoading, setUrlLoading] = useState(false)
   const [fetchStatus, setFetchStatus] = useState<string | null>(null)
   const [highlightElement, setHighlightElement] = useState<string | null>(null)
@@ -1415,17 +1415,13 @@ export default function App() {
   defaultIsoLevelRef.current = defaultIsoLevel
 
   const exampleLinks = (
-    <details
-      open={examplesOpen}
-      onToggle={e => {
-        const open = (e.target as HTMLDetailsElement).open
-        setExamplesOpen(open)
-        sessionStorage.setItem('elvis-examples-open', String(open))
-      }}
-      style={{ padding: '4px 16px', fontSize: 12, color: '#999' }}
+    <DrawerSection
+      id="examples"
+      title="Examples"
+      icon={<Sparkles size={16} />}
+      accent="#c8a25b"
     >
-      <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Examples</summary>
-      <ul style={{ margin: '4px 0 0', paddingLeft: 20, lineHeight: 1.8 }}>
+      <ul style={{ margin: '4px 0 0', paddingLeft: 20, lineHeight: 1.8, fontSize: 12 }}>
         {EXAMPLES.map(ex => {
           const cached = cachedMpIds.has(ex.mpId)
           return (
@@ -1445,7 +1441,7 @@ export default function App() {
           )
         })}
       </ul>
-    </details>
+    </DrawerSection>
   )
 
   const isComparison = files.length > 1
@@ -1565,21 +1561,44 @@ export default function App() {
       </div>
       <div className={styles.sidebar}>
         {opfsStore && (
-          <VolumeGallery
-            store={opfsStore}
-            currentVolumeId={currentVolumeId}
-            onSelect={handleGallerySelect}
-            refreshKey={galleryRefreshKey}
-          />
+          <DrawerSection
+            id="gallery"
+            title="Cached Files"
+            icon={<Database size={16} />}
+            accent="#7c8a9c"
+            badge={cachedCount > 0 ? `(${cachedCount})` : undefined}
+          >
+            <VolumeGallery
+              store={opfsStore}
+              currentVolumeId={currentVolumeId}
+              onSelect={handleGallerySelect}
+              refreshKey={galleryRefreshKey}
+              onCountChange={setCachedCount}
+            />
+          </DrawerSection>
         )}
-        <Settings
-          settings={settings}
-          onUpdate={updateSettings}
-          showCacheToggle={!!opfsStore}
-          lineWidth={lineWidth}
-          onLineWidthChange={setLineWidth}
-        />
-        <URLInput onSubmit={handleUrlSubmit} loading={urlLoading} />
+        <DrawerSection
+          id="settings"
+          title="Settings"
+          icon={<Settings2 size={16} />}
+          accent="#9aa0a6"
+        >
+          <Settings
+            settings={settings}
+            onUpdate={updateSettings}
+            showCacheToggle={!!opfsStore}
+            lineWidth={lineWidth}
+            onLineWidthChange={setLineWidth}
+          />
+        </DrawerSection>
+        <DrawerSection
+          id="url"
+          title="Load from URL"
+          icon={<Link2 size={16} />}
+          accent="#4a9eff"
+        >
+          <URLInput onSubmit={handleUrlSubmit} loading={urlLoading} />
+        </DrawerSection>
         {srcRole === 'diff' && (
           <DiffSources
             v0Url={v0Url ?? ''}
