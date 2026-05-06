@@ -23,6 +23,7 @@ import {
   fetchZarrVolume,
   parseS3Pattern,
   DrawerSection,
+  DRAWER_EVT,
 } from '@elvis/core'
 import { Database, Link2, Settings2, Sparkles } from 'lucide-react'
 import { ShortcutsModal, Omnibar, SequenceModal, LookupModal, SpeedDial, ModeIndicator, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
@@ -496,6 +497,27 @@ export default function App() {
     group: 'View',
     defaultBindings: ['d'],
     handler: () => setDashedLines(!dashedLines),
+  })
+  useAction('drawer:collapse-all', {
+    label: 'Collapse all drawer sections',
+    description: 'Hide every right-drawer section at once',
+    group: 'Drawer',
+    defaultBindings: ['['],
+    handler: () => window.dispatchEvent(new Event(DRAWER_EVT.collapseAll)),
+  })
+  useAction('drawer:expand-all', {
+    label: 'Expand all drawer sections',
+    description: 'Show every right-drawer section at once',
+    group: 'Drawer',
+    defaultBindings: [']'],
+    handler: () => window.dispatchEvent(new Event(DRAWER_EVT.expandAll)),
+  })
+  useAction('drawer:focus-last', {
+    label: 'Focus last-touched drawer section',
+    description: 'Collapse all sections except the most recently interacted one',
+    group: 'Drawer',
+    defaultBindings: ['\\'],
+    handler: () => window.dispatchEvent(new Event(DRAWER_EVT.focusLastTouched)),
   })
   useAction('materials:browse', {
     label: 'Browse materials',

@@ -56,6 +56,26 @@ function saveOpen(id: string, open: boolean) {
   try { localStorage.setItem(`${STORAGE_KEY_PREFIX}${id}.open`, open ? '1' : '0') } catch { /* noop */ }
 }
 
+const LAST_TOUCHED_KEY = 'elvis.drawer.lastTouched'
+
+/** Record an interaction with this section. The `\` hotkey reads this to decide which
+    section to keep open while collapsing the rest. */
+function markTouched(id: string) {
+  try { localStorage.setItem(LAST_TOUCHED_KEY, id) } catch { /* noop */ }
+}
+
+/** Drawer-level hotkey events. Handlers in `App.tsx` dispatch these on `[ ] \`. */
+export const DRAWER_EVT = {
+  collapseAll: 'elvis:drawer-collapse-all',
+  expandAll: 'elvis:drawer-expand-all',
+  focusLastTouched: 'elvis:drawer-focus-last',
+} as const
+
+/** Read the most-recently-interacted section id (for `\` focus hotkey). */
+export function getLastTouchedSection(): string | null {
+  try { return localStorage.getItem(LAST_TOUCHED_KEY) } catch { return null }
+}
+
 export function DrawerSection({
   id,
   title,
@@ -79,11 +99,34 @@ export function DrawerSection({
     }
   }, [forceOpenGen, id])
 
+  // Listen for drawer-level hotkey events (collapse-all / expand-all / focus-last).
+  useEffect(() => {
+    const onCollapse = () => { setOpen(false); saveOpen(id, false) }
+    const onExpand = () => { setOpen(true); saveOpen(id, true) }
+    const onFocus = () => {
+      const target = getLastTouchedSection()
+      const keepOpen = target === id
+      setOpen(keepOpen)
+      saveOpen(id, keepOpen)
+    }
+    window.addEventListener(DRAWER_EVT.collapseAll, onCollapse)
+    window.addEventListener(DRAWER_EVT.expandAll, onExpand)
+    window.addEventListener(DRAWER_EVT.focusLastTouched, onFocus)
+    return () => {
+      window.removeEventListener(DRAWER_EVT.collapseAll, onCollapse)
+      window.removeEventListener(DRAWER_EVT.expandAll, onExpand)
+      window.removeEventListener(DRAWER_EVT.focusLastTouched, onFocus)
+    }
+  }, [id])
+
   const onToggle = useCallback((e: React.SyntheticEvent<HTMLDetailsElement>) => {
     const next = (e.currentTarget as HTMLDetailsElement).open
     setOpen(next)
     saveOpen(id, next)
+    markTouched(id)
   }, [id])
+
+  const onPointerDown = useCallback(() => markTouched(id), [id])
 
   return (
     <details
@@ -91,6 +134,7 @@ export function DrawerSection({
       data-section-id={id}
       open={open}
       onToggle={onToggle}
+      onPointerDown={onPointerDown}
       style={{ ['--accent' as string]: accent }}
     >
       <summary className={styles.summary}>
