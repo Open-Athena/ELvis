@@ -516,7 +516,8 @@ export default function App() {
     label: 'Focus last-touched drawer section',
     description: 'Collapse all sections except the most recently interacted one',
     group: 'Drawer',
-    defaultBindings: ['\\'],
+    // `\` would conflict with the `\f t` chord for tile padding; use `;` instead.
+    defaultBindings: [';'],
     handler: () => window.dispatchEvent(new Event(DRAWER_EVT.focusLastTouched)),
   })
   useAction('materials:browse', {
