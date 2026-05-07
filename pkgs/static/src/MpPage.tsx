@@ -3,6 +3,9 @@ import { useUrlState, stringParam, intParam, optIntParam } from 'use-prms'
 import type { Database } from 'sql.js'
 import { fetchMpdb, queryMaterials, querySummary } from './mpdb/loader.ts'
 import type { FilterState, MaterialRow, MpdbSummary } from './mpdb/loader.ts'
+import { Scatter } from './mpdb/Scatter.tsx'
+
+type Tab = 'table' | 'scatter'
 
 interface MpPageProps {
   /** Called with an mp_id when the user clicks a row — parent flips `?view=` off
@@ -16,6 +19,7 @@ const DEFAULT_URL = 'https://openathena.s3.amazonaws.com/mpdb/v2/mpdb.sqlite'
 
 export function MpPage({ onSelect, onClose }: MpPageProps) {
   const [mpdbUrl] = useUrlState('mpdb', stringParam(DEFAULT_URL))
+  const [tab, setTab] = useUrlState('mp_tab', stringParam('table')) as [Tab, (v: Tab) => void]
   const [search, setSearch] = useUrlState('mp_q', stringParam(''), { debounce: 300 })
   const [splitMask] = useUrlState('mp_s', intParam(0b1111))
   const [nAtomsMin, setNAtomsMin] = useUrlState('mp_aMin', optIntParam, { debounce: 300 })
@@ -57,7 +61,11 @@ export function MpPage({ onSelect, onClose }: MpPageProps) {
     return () => { cancelled = true }
   }, [mpdbUrl])
 
-  const rows = useMemo<MaterialRow[]>(() => db ? queryMaterials(db, filter) : [], [db, filter])
+  // Table caps at 5,000 rows (you scroll); scatter pulls all matching rows since
+  // canvas can paint 80K dots cheaply and the value of the scatter is seeing the
+  // whole distribution at once.
+  const rowLimit = tab === 'scatter' ? 0 : 5000
+  const rows = useMemo<MaterialRow[]>(() => db ? queryMaterials(db, filter, rowLimit) : [], [db, filter, rowLimit])
   const summary = useMemo<MpdbSummary | null>(() => db ? querySummary(db, filter) : null, [db, filter])
 
   // Esc to close.
@@ -79,6 +87,8 @@ export function MpPage({ onSelect, onClose }: MpPageProps) {
         search={search ?? ''}
         onSearchChange={setSearch}
         onClose={onClose}
+        tab={tab}
+        onTabChange={setTab}
       />
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Filters
@@ -99,7 +109,10 @@ export function MpPage({ onSelect, onClose }: MpPageProps) {
               ask in #ml or flip the bucket ACL on this key.
             </>}
           </div>}
-          {!error && db && <Table rows={rows} onSelect={onSelect} />}
+          {!error && db && tab === 'table' && <Table rows={rows} onSelect={onSelect} />}
+          {!error && db && tab === 'scatter' && (
+            <Scatter rows={rows} onSelect={onSelect} xKey="n_atoms" yKey="n_electrons" />
+          )}
           {!error && !db && loading && <div style={{ padding: 16, color: '#888' }}>Loading mpdb.sqlite…</div>}
         </div>
       </div>
@@ -107,13 +120,15 @@ export function MpPage({ onSelect, onClose }: MpPageProps) {
   )
 }
 
-function Header({ loading, error, summary, search, onSearchChange, onClose }: {
+function Header({ loading, error, summary, search, onSearchChange, onClose, tab, onTabChange }: {
   loading: boolean
   error: string | null
   summary: MpdbSummary | null
   search: string
   onSearchChange: (v: string) => void
   onClose: () => void
+  tab: Tab
+  onTabChange: (t: Tab) => void
 }) {
   const [draft, setDraft] = useState(search)
   useEffect(() => { setDraft(search) }, [search])
@@ -129,6 +144,10 @@ function Header({ loading, error, summary, search, onSearchChange, onClose }: {
     }}>
       <button onClick={onClose} title="Back to viewer (Esc)" style={btn()}>← back</button>
       <strong style={{ fontSize: 14 }}>MPDB v2</strong>
+      <div style={{ display: 'flex', gap: 0, border: '1px solid #2a2a40', borderRadius: 3, overflow: 'hidden' }}>
+        <button onClick={() => onTabChange('table')} style={tabBtn(tab === 'table')}>table</button>
+        <button onClick={() => onTabChange('scatter')} style={tabBtn(tab === 'scatter')}>scatter</button>
+      </div>
       <input
         type="text"
         placeholder="Search mp_id…"
@@ -272,5 +291,17 @@ function btn(): React.CSSProperties {
   return {
     padding: '4px 10px', background: 'transparent', border: '1px solid #2a2a40',
     borderRadius: 3, color: '#aaa', fontSize: 13, cursor: 'pointer',
+  }
+}
+
+function tabBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '4px 10px',
+    background: active ? '#2a2a40' : 'transparent',
+    border: 'none',
+    color: active ? '#eee' : '#888',
+    fontSize: 12,
+    cursor: 'pointer',
+    fontWeight: active ? 600 : 400,
   }
 }

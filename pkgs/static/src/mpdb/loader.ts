@@ -48,8 +48,10 @@ export async function fetchMpdb(url: string = DEFAULT_URL): Promise<Database> {
   return new SQL.Database(bytes)
 }
 
-/** Run the filtered query and return matching rows. Pure SQL — no in-JS filtering. */
-export function queryMaterials(db: Database, f: FilterState): MaterialRow[] {
+/** Run the filtered query and return matching rows. Pure SQL — no in-JS filtering.
+ *  `limit` defaults to 5,000 for the table view; the scatter view passes 0 (no limit)
+ *  since canvas can paint the full 80K cheaply. */
+export function queryMaterials(db: Database, f: FilterState, limit = 5000): MaterialRow[] {
   const where: string[] = []
   const params: Record<string, string | number> = {}
   if (f.search.trim()) {
@@ -77,7 +79,7 @@ export function queryMaterials(db: Database, f: FilterState): MaterialRow[] {
     FROM mats
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY mp_id
-    LIMIT 5000
+    ${limit > 0 ? `LIMIT ${limit}` : ''}
   `
   const stmt = db.prepare(sql)
   stmt.bind(params)
@@ -107,7 +109,31 @@ export function querySummary(db: Database, f: FilterState): MpdbSummary {
       SUM(CASE WHEN split IS NULL THEN 1 ELSE 0 END) unknown
     FROM mats
   `)[0].values[0]
-  const matched = queryMaterials(db, f).length
+  // Cheap COUNT-only query for the matched count — avoids the large rowset
+  // when filters are wide open.
+  const where: string[] = []
+  const params: Record<string, string | number> = {}
+  if (f.search.trim()) { where.push('mp_id LIKE :search'); params[':search'] = `${f.search.trim()}%` }
+  if (f.splits.length > 0 && f.splits.length < 4) {
+    const known = f.splits.filter(s => s !== 'unknown')
+    const wantUnknown = f.splits.includes('unknown')
+    const clauses: string[] = []
+    if (known.length > 0) {
+      clauses.push(`split IN (${known.map((_, i) => `:s${i}`).join(',')})`)
+      known.forEach((s, i) => { params[`:s${i}`] = s })
+    }
+    if (wantUnknown) clauses.push('split IS NULL')
+    if (clauses.length) where.push(`(${clauses.join(' OR ')})`)
+  }
+  if (f.nAtomsMin !== null) { where.push('n_atoms >= :naMin'); params[':naMin'] = f.nAtomsMin }
+  if (f.nAtomsMax !== null) { where.push('n_atoms <= :naMax'); params[':naMax'] = f.nAtomsMax }
+  if (f.nElectronsMin !== null) { where.push('n_electrons >= :neMin'); params[':neMin'] = f.nElectronsMin }
+  if (f.nElectronsMax !== null) { where.push('n_electrons <= :neMax'); params[':neMax'] = f.nElectronsMax }
+  const stmt = db.prepare(`SELECT COUNT(*) FROM mats ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`)
+  stmt.bind(params)
+  stmt.step()
+  const matched = Number(stmt.get()[0])
+  stmt.free()
   return {
     total: Number(totals[0]) || 0,
     train: Number(totals[1]) || 0,
