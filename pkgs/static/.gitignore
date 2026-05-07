@@ -1,2 +1,5 @@
 test-results/
 playwright-report/
+
+# Local mpdb fixture for /mp dev. Real mpdb.sqlite is fetched from S3 at runtime.
+public/mpdb.sqlite

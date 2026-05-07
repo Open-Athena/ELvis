@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect, lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { VolumeData, StoredVolume, CameraSnapTarget } from '@elvis/core'
 import {
@@ -51,6 +51,9 @@ interface LoadedFile {
 }
 
 const DEFAULT_ISO_QUANTILE = 0.95
+
+// Lazy-load MpPage so the sql.js WASM (~700 KB) only ships when the user opens `/mp`.
+const MpPage = lazy(() => import('./MpPage.tsx').then(m => ({ default: m.MpPage })))
 
 function computeDefaultIsoFromQuantiles(qs: Float32Array): number {
   // Quantiles array is sorted; index maps linearly to quantile.
@@ -242,6 +245,9 @@ export default function App() {
   const [cam, setCam] = useUrlState('c', camParam)
   const [camTarget, setCamTarget] = useUrlState('ct', camTargetParam, { debounce: 500 })
   const [materialId, setMaterialId] = useUrlState('m', stringParam(DEFAULT_MP_ID), { push: true })
+  // Top-level view switcher. Currently only the MPDB browse page swaps in;
+  // empty/undefined renders the normal viewer.
+  const [view, setView] = useUrlState('view', stringParam(''), { push: true })
   type SrcRole = 'input' | 'label' | 'diff'
   const [srcRole, setSrcRole] = useUrlState('src', stringParam('label')) as [SrcRole, (v: SrcRole) => void]
   // Diff mode operand overrides (only meaningful when src=diff). Empty = auto-resolve from `m=`.
@@ -511,6 +517,14 @@ export default function App() {
     group: 'Drawer',
     defaultBindings: [']'],
     handler: () => window.dispatchEvent(new Event(DRAWER_EVT.expandAll)),
+  })
+  useAction('mp:open', {
+    label: 'Open MPDB browser',
+    description: 'Filterable table of every material in the tomat training set',
+    keywords: ['mp', 'mpdb', 'browse', 'table', 'materials project'],
+    group: 'Materials',
+    defaultBindings: ['m'],
+    handler: () => setView('mp'),
   })
   useAction('drawer:focus-last', {
     label: 'Focus last-touched drawer section',
@@ -1472,6 +1486,14 @@ export default function App() {
 
   return (
     <div className={styles.app}>
+      {view === 'mp' && (
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#0a0a14', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>Loading MPDB browser…</div>}>
+          <MpPage
+            onSelect={mpId => { setView(''); setMaterialId(mpId) }}
+            onClose={() => setView('')}
+          />
+        </Suspense>
+      )}
       <div className={styles.viewer} onPointerDown={() => { cameraInteracted.current = true }}>
         <ErrorBoundary label="Viewer" resetKey={`${materialId}:${effectiveIsoLevel}`}>
           {primaryFile ? (
