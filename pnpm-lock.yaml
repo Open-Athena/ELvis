@@ -106,6 +106,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
+      '@types/react-window':
+        specifier: ^2.0.0
+        version: 2.0.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       aws-static-sso:
         specifier: https://github.com/runsascoded/aws-static-sso#13075f68e82e86ed23156764922fb7333c912eea&path:/client
         version: https://codeload.github.com/runsascoded/aws-static-sso/tar.gz/13075f68e82e86ed23156764922fb7333c912eea#path:/client
@@ -118,6 +121,9 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.2.4(react@19.2.4)
+      react-window:
+        specifier: ^2.2.7
+        version: 2.2.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       sql.js:
         specifier: ^1.14.1
         version: 1.14.1
@@ -1256,6 +1262,10 @@ packages:
     peerDependencies:
       '@types/react': '*'
 
+  '@types/react-window@2.0.0':
+    resolution: {integrity: sha512-E8hMDtImEpMk1SjswSvqoSmYvk7GEtyVaTa/GJV++FdDNuMVVEzpAClyJ0nqeKYBrMkGiyH6M1+rPLM0Nu1exQ==}
+    deprecated: This is a stub types definition. react-window provides its own type definitions, so you do not need this installed.
+
   '@types/react@19.2.14':
     resolution: {integrity: sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==}
 
@@ -2127,6 +2137,12 @@ packages:
     peerDependenciesMeta:
       react-dom:
         optional: true
+
+  react-window@2.2.7:
+    resolution: {integrity: sha512-SH5nvfUQwGHYyriDUAOt7wfPsfG9Qxd6OdzQxl5oQ4dsSsUicqQvjV7dR+NqZ4coY0fUn3w1jnC5PwzIUWEg5w==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
+      react-dom: ^18.0.0 || ^19.0.0
 
   react@19.2.4:
     resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
@@ -3999,6 +4015,13 @@ snapshots:
     dependencies:
       '@types/react': 19.2.14
 
+  '@types/react-window@2.0.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      react-window: 2.2.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+    transitivePeerDependencies:
+      - react
+      - react-dom
+
   '@types/react@19.2.14':
     dependencies:
       csstype: 3.2.3
@@ -4919,6 +4942,11 @@ snapshots:
     dependencies:
       react: 19.2.4
     optionalDependencies:
+      react-dom: 19.2.4(react@19.2.4)
+
+  react-window@2.2.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+    dependencies:
+      react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
   react@19.2.4: {}

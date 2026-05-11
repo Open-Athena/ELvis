@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useUrlState, stringParam, intParam, optIntParam } from 'use-prms'
 import type { Database } from 'sql.js'
-import { fetchMpdb, queryMaterials, querySummary } from './mpdb/loader.ts'
-import type { FilterState, MaterialRow, MpdbSummary } from './mpdb/loader.ts'
+import { List } from 'react-window'
+import { fetchMpdb, queryMaterials, querySummary, queryScatterData } from './mpdb/loader.ts'
+import type { FilterState, MaterialRow, MpdbSummary, ScatterData } from './mpdb/loader.ts'
 import { Scatter } from './mpdb/Scatter.tsx'
 
 type Tab = 'table' | 'scatter'
@@ -61,11 +62,17 @@ export function MpPage({ onSelect, onClose }: MpPageProps) {
     return () => { cancelled = true }
   }, [mpdbUrl])
 
-  // Table caps at 5,000 rows (you scroll); scatter pulls all matching rows since
-  // canvas can paint 80K dots cheaply and the value of the scatter is seeing the
-  // whole distribution at once.
-  const rowLimit = tab === 'scatter' ? 0 : 5000
-  const rows = useMemo<MaterialRow[]>(() => db ? queryMaterials(db, filter, rowLimit) : [], [db, filter, rowLimit])
+  // Two query shapes:
+  //  - table → row-of-objects, LIMIT 5,000 (the windowed list only renders ~30 at a time).
+  //  - scatter → column-major typed arrays for the full filtered set, fast to iterate.
+  const rows = useMemo<MaterialRow[]>(
+    () => db && tab === 'table' ? queryMaterials(db, filter, 5000) : [],
+    [db, filter, tab],
+  )
+  const scatterData = useMemo<ScatterData | null>(
+    () => db && tab === 'scatter' ? queryScatterData(db, filter) : null,
+    [db, filter, tab],
+  )
   const summary = useMemo<MpdbSummary | null>(() => db ? querySummary(db, filter) : null, [db, filter])
 
   // Esc to close.
@@ -110,8 +117,8 @@ export function MpPage({ onSelect, onClose }: MpPageProps) {
             </>}
           </div>}
           {!error && db && tab === 'table' && <Table rows={rows} onSelect={onSelect} />}
-          {!error && db && tab === 'scatter' && (
-            <Scatter rows={rows} onSelect={onSelect} xKey="n_atoms" yKey="n_electrons" />
+          {!error && db && tab === 'scatter' && scatterData && (
+            <Scatter data={scatterData} onSelect={onSelect} xKey="nAtoms" yKey="nElectrons" />
           )}
           {!error && !db && loading && <div style={{ padding: 16, color: '#888' }}>Loading mpdb.sqlite…</div>}
         </div>
@@ -239,44 +246,84 @@ function NumInput({ value, placeholder, onCommit }: {
   )
 }
 
+const ROW_HEIGHT = 24
+const HEADER_HEIGHT = 28
+// Grid template applied to header + every row so columns line up across the
+// virtualised list (which can't use a real <table>).
+const GRID_TEMPLATE = 'minmax(110px, 1fr) 70px 80px 100px 110px 110px'
+
 function Table({ rows, onSelect }: { rows: MaterialRow[]; onSelect: (mpId: string) => void }) {
-  const cellStyle: React.CSSProperties = { padding: '4px 8px', borderBottom: '1px solid #1a1a28', fontVariantNumeric: 'tabular-nums' }
-  const headStyle: React.CSSProperties = { ...cellStyle, fontWeight: 600, color: '#aaa', position: 'sticky', top: 0, background: '#0a0a14', zIndex: 1 }
   const onRowClick = useCallback((id: string) => onSelect(id), [onSelect])
+  const showFooter = rows.length === 5000
+  const itemCount = rows.length + (showFooter ? 1 : 0)
+
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-      <thead>
-        <tr>
-          <th style={{ ...headStyle, textAlign: 'left' }}>mp_id</th>
-          <th style={{ ...headStyle, textAlign: 'left' }}>split</th>
-          <th style={{ ...headStyle, textAlign: 'right' }}>n_atoms</th>
-          <th style={{ ...headStyle, textAlign: 'right' }}>n_electrons</th>
-          <th style={{ ...headStyle, textAlign: 'right' }}>grid</th>
-          <th style={{ ...headStyle, textAlign: 'right' }}>n_voxels</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(r => (
-          <tr
-            key={r.mp_id}
-            onClick={() => onRowClick(r.mp_id)}
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(74, 158, 255, 0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <td style={{ ...cellStyle, fontFamily: 'ui-monospace, monospace', color: '#8ab' }}>{r.mp_id}</td>
-            <td style={{ ...cellStyle, color: splitColor(r.split) }}>{r.split ?? '—'}</td>
-            <td style={{ ...cellStyle, textAlign: 'right' }}>{r.n_atoms.toLocaleString()}</td>
-            <td style={{ ...cellStyle, textAlign: 'right' }}>{r.n_electrons.toLocaleString()}</td>
-            <td style={{ ...cellStyle, textAlign: 'right', color: '#888' }}>{r.nx}×{r.ny}×{r.nz}</td>
-            <td style={{ ...cellStyle, textAlign: 'right', color: '#888' }}>{r.n_voxels.toLocaleString()}</td>
-          </tr>
-        ))}
-        {rows.length === 5000 && (
-          <tr><td colSpan={6} style={{ ...cellStyle, color: '#666', fontStyle: 'italic' }}>(showing first 5,000 — narrow filters to see more)</td></tr>
-        )}
-      </tbody>
-    </table>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: GRID_TEMPLATE, alignItems: 'center',
+        height: HEADER_HEIGHT, padding: '0 8px', borderBottom: '1px solid #2a2a40',
+        background: '#0a0a14', fontWeight: 600, color: '#aaa', fontSize: 12, flexShrink: 0,
+      }}>
+        <span style={{ textAlign: 'left' }}>mp_id</span>
+        <span style={{ textAlign: 'left' }}>split</span>
+        <span style={{ textAlign: 'right' }}>n_atoms</span>
+        <span style={{ textAlign: 'right' }}>n_electrons</span>
+        <span style={{ textAlign: 'right' }}>grid</span>
+        <span style={{ textAlign: 'right' }}>n_voxels</span>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <List
+          rowCount={itemCount}
+          rowHeight={ROW_HEIGHT}
+          overscanCount={8}
+          rowComponent={Row}
+          rowProps={{ rows, onRowClick, showFooter }}
+          style={{ height: '100%' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+interface RowProps {
+  rows: MaterialRow[]
+  onRowClick: (id: string) => void
+  showFooter: boolean
+}
+
+function Row({ index, style, rows, onRowClick, showFooter, ariaAttributes }: {
+  index: number
+  style: React.CSSProperties
+  ariaAttributes: { 'aria-posinset': number; 'aria-setsize': number; role: 'listitem' }
+} & RowProps) {
+  if (showFooter && index === rows.length) {
+    return (
+      <div style={{ ...style, padding: '4px 8px', color: '#666', fontStyle: 'italic', fontSize: 12 }} {...ariaAttributes}>
+        (showing first 5,000 — narrow filters to see more)
+      </div>
+    )
+  }
+  const r = rows[index]
+  return (
+    <div
+      {...ariaAttributes}
+      style={{
+        ...style,
+        display: 'grid', gridTemplateColumns: GRID_TEMPLATE, alignItems: 'center',
+        padding: '0 8px', borderBottom: '1px solid #1a1a28',
+        fontSize: 12, fontVariantNumeric: 'tabular-nums', cursor: 'pointer',
+      }}
+      onClick={() => onRowClick(r.mp_id)}
+      onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'rgba(74, 158, 255, 0.08)'}
+      onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+    >
+      <span style={{ fontFamily: 'ui-monospace, monospace', color: '#8ab', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.mp_id}</span>
+      <span style={{ color: splitColor(r.split) }}>{r.split ?? '—'}</span>
+      <span style={{ textAlign: 'right' }}>{r.n_atoms.toLocaleString()}</span>
+      <span style={{ textAlign: 'right' }}>{r.n_electrons.toLocaleString()}</span>
+      <span style={{ textAlign: 'right', color: '#888' }}>{r.nx}×{r.ny}×{r.nz}</span>
+      <span style={{ textAlign: 'right', color: '#888' }}>{r.n_voxels.toLocaleString()}</span>
+    </div>
   )
 }
 

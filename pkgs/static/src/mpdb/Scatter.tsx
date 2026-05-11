@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import type { MaterialRow } from './loader.ts'
+import type { ScatterData } from './loader.ts'
 
 interface ScatterProps {
-  rows: MaterialRow[]
+  data: ScatterData
   onSelect: (mpId: string) => void
-  xKey: 'n_atoms' | 'n_electrons' | 'n_voxels'
-  yKey: 'n_atoms' | 'n_electrons' | 'n_voxels'
+  xKey: 'nAtoms' | 'nElectrons' | 'nVoxels'
+  yKey: 'nAtoms' | 'nElectrons' | 'nVoxels'
 }
 
 const SPLIT_COLOR: Record<string, string> = {
@@ -16,22 +16,28 @@ const SPLIT_COLOR: Record<string, string> = {
 }
 
 const PADDING = { top: 16, right: 24, bottom: 36, left: 56 }
+
+const LABELS: Record<ScatterProps['xKey'], string> = {
+  nAtoms: 'n_atoms',
+  nElectrons: 'n_electrons',
+  nVoxels: 'n_voxels',
+}
 const POINT_RADIUS = 2
 const HIT_RADIUS = 6
+const HIT_RADIUS_SQ = HIT_RADIUS * HIT_RADIUS
 
 interface Tooltip {
   x: number
   y: number
-  row: MaterialRow
+  idx: number
 }
 
-export function Scatter({ rows, onSelect, xKey, yKey }: ScatterProps) {
+export function Scatter({ data, onSelect, xKey, yKey }: ScatterProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const [tooltip, setTooltip] = useState<Tooltip | null>(null)
 
-  // Resize observer keeps canvas dimensions in sync with the container.
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -41,39 +47,55 @@ export function Scatter({ rows, onSelect, xKey, yKey }: ScatterProps) {
     return () => ro.disconnect()
   }, [])
 
-  const stats = useMemo(() => {
+  const xs = data[xKey]
+  const ys = data[yKey]
+
+  // Axis range from typed-array min/max (no allocation per row).
+  const ranges = useMemo(() => {
     let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity
-    for (const r of rows) {
-      const x = r[xKey], y = r[yKey]
+    for (let i = 0; i < xs.length; i++) {
+      const x = xs[i], y = ys[i]
       if (x < xMin) xMin = x; if (x > xMax) xMax = x
       if (y < yMin) yMin = y; if (y > yMax) yMax = y
     }
     if (!isFinite(xMin)) return null
-    // Pad ranges 5% each side so the corners aren't on the axis line.
     const xPad = (xMax - xMin) * 0.05 || 1
     const yPad = (yMax - yMin) * 0.05 || 1
     return { xMin: xMin - xPad, xMax: xMax + xPad, yMin: yMin - yPad, yMax: yMax + yPad }
-  }, [rows, xKey, yKey])
+  }, [xs, ys])
 
-  // Project data → screen coords, used by both render and hit-test.
   const project = useMemo(() => {
-    if (!stats || size.w === 0 || size.h === 0) return null
+    if (!ranges || size.w === 0 || size.h === 0) return null
     const plotW = size.w - PADDING.left - PADDING.right
     const plotH = size.h - PADDING.top - PADDING.bottom
     if (plotW <= 0 || plotH <= 0) return null
-    const { xMin, xMax, yMin, yMax } = stats
+    const { xMin, xMax, yMin, yMax } = ranges
     const xScale = plotW / (xMax - xMin || 1)
     const yScale = plotH / (yMax - yMin || 1)
     return {
       px: (x: number) => PADDING.left + (x - xMin) * xScale,
       py: (y: number) => PADDING.top + plotH - (y - yMin) * yScale,
-      plotW, plotH, ...stats,
+      plotW, plotH, ...ranges,
     }
-  }, [stats, size])
+  }, [ranges, size])
 
-  // Render points + axes on canvas.
+  // Precompute screen-space x/y for every point, in two Float32Arrays. The hit-test
+  // uses these to skip recomputing per mousemove.
+  const screenCoords = useMemo(() => {
+    if (!project) return null
+    const n = xs.length
+    const sx = new Float32Array(n)
+    const sy = new Float32Array(n)
+    for (let i = 0; i < n; i++) {
+      sx[i] = project.px(xs[i])
+      sy[i] = project.py(ys[i])
+    }
+    return { sx, sy, n }
+  }, [project, xs, ys])
+
+  // Render points + axes.
   useEffect(() => {
-    if (!canvasRef.current || !project) return
+    if (!canvasRef.current || !project || !screenCoords) return
     const canvas = canvasRef.current
     const dpr = window.devicePixelRatio || 1
     canvas.width = size.w * dpr
@@ -84,32 +106,50 @@ export function Scatter({ rows, onSelect, xKey, yKey }: ScatterProps) {
     ctx.scale(dpr, dpr)
     ctx.clearRect(0, 0, size.w, size.h)
 
-    drawAxes(ctx, project, size.w, size.h, xKey, yKey)
-    drawPoints(ctx, rows, project, xKey, yKey)
-  }, [rows, project, size, xKey, yKey])
+    drawAxes(ctx, project, size.w, size.h, LABELS[xKey], LABELS[yKey])
 
-  // Hit-test on mouse move. We do a simple linear scan since rows ≤ 5,000;
-  // for larger N a quadtree would be the move.
+    // Group draws by split colour: one beginPath/fill per split, all dots inside.
+    const order = ['unknown', 'train', 'val', 'test'] as const
+    for (const split of order) {
+      ctx.fillStyle = SPLIT_COLOR[split]
+      ctx.globalAlpha = split === 'unknown' ? 0.5 : 0.85
+      ctx.beginPath()
+      const matchKey = split === 'unknown' ? null : split
+      for (let i = 0; i < screenCoords.n; i++) {
+        if (data.splits[i] !== matchKey) continue
+        const x = screenCoords.sx[i]
+        const y = screenCoords.sy[i]
+        ctx.moveTo(x + POINT_RADIUS, y)
+        ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2)
+      }
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  }, [data, project, screenCoords, size, xKey, yKey])
+
   const onMouseMove = (e: React.MouseEvent) => {
-    if (!project) return
+    if (!screenCoords) return
     const rect = canvasRef.current!.getBoundingClientRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
-    let best: { row: MaterialRow; d2: number } | null = null
-    for (const r of rows) {
-      const dx = project.px(r[xKey]) - mx
-      const dy = project.py(r[yKey]) - my
+    let bestIdx = -1
+    let bestD2 = HIT_RADIUS_SQ
+    const { sx, sy, n } = screenCoords
+    for (let i = 0; i < n; i++) {
+      const dx = sx[i] - mx
+      if (dx < -HIT_RADIUS || dx > HIT_RADIUS) continue
+      const dy = sy[i] - my
+      if (dy < -HIT_RADIUS || dy > HIT_RADIUS) continue
       const d2 = dx * dx + dy * dy
-      if (d2 < HIT_RADIUS * HIT_RADIUS && (!best || d2 < best.d2)) best = { row: r, d2 }
+      if (d2 < bestD2) { bestD2 = d2; bestIdx = i }
     }
-    if (best) setTooltip({ x: project.px(best.row[xKey]), y: project.py(best.row[yKey]), row: best.row })
+    if (bestIdx >= 0) setTooltip({ x: sx[bestIdx], y: sy[bestIdx], idx: bestIdx })
     else setTooltip(null)
   }
 
   const onMouseLeave = () => setTooltip(null)
-
   const onClick = () => {
-    if (tooltip) onSelect(tooltip.row.mp_id)
+    if (tooltip) onSelect(data.mpIds[tooltip.idx])
   }
 
   return (
@@ -140,48 +180,15 @@ export function Scatter({ rows, onSelect, xKey, yKey }: ScatterProps) {
             whiteSpace: 'nowrap',
           }}
         >
-          <div style={{ color: '#8ab' }}>{tooltip.row.mp_id}</div>
-          <div style={{ color: SPLIT_COLOR[tooltip.row.split ?? 'unknown'] }}>{tooltip.row.split ?? 'unknown'}</div>
-          <div style={{ color: '#aaa' }}>{xKey} = {tooltip.row[xKey].toLocaleString()}</div>
-          <div style={{ color: '#aaa' }}>{yKey} = {tooltip.row[yKey].toLocaleString()}</div>
+          <div style={{ color: '#8ab' }}>{data.mpIds[tooltip.idx]}</div>
+          <div style={{ color: SPLIT_COLOR[data.splits[tooltip.idx] ?? 'unknown'] }}>{data.splits[tooltip.idx] ?? 'unknown'}</div>
+          <div style={{ color: '#aaa' }}>{LABELS[xKey]} = {xs[tooltip.idx].toLocaleString()}</div>
+          <div style={{ color: '#aaa' }}>{LABELS[yKey]} = {ys[tooltip.idx].toLocaleString()}</div>
           <div style={{ color: '#888', fontSize: 11, marginTop: 2 }}>click to open</div>
         </div>
       )}
     </div>
   )
-}
-
-function drawPoints(
-  ctx: CanvasRenderingContext2D,
-  rows: MaterialRow[],
-  project: NonNullable<ReturnType<typeof useMemo<unknown>>> & { px: (x: number) => number; py: (y: number) => number },
-  xKey: ScatterProps['xKey'],
-  yKey: ScatterProps['yKey'],
-) {
-  // Group fills so we set fillStyle once per split, not per-point.
-  const buckets = new Map<string, MaterialRow[]>()
-  for (const r of rows) {
-    const k = r.split ?? 'unknown'
-    if (!buckets.has(k)) buckets.set(k, [])
-    buckets.get(k)!.push(r)
-  }
-  // Render order: unknown → train → val → test (so test stands out in front)
-  const order = ['unknown', 'train', 'val', 'test'] as const
-  for (const split of order) {
-    const list = buckets.get(split)
-    if (!list) continue
-    ctx.fillStyle = SPLIT_COLOR[split]
-    ctx.globalAlpha = split === 'unknown' ? 0.5 : 0.85
-    ctx.beginPath()
-    for (const r of list) {
-      const x = project.px(r[xKey])
-      const y = project.py(r[yKey])
-      ctx.moveTo(x + POINT_RADIUS, y)
-      ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2)
-    }
-    ctx.fill()
-  }
-  ctx.globalAlpha = 1
 }
 
 function drawAxes(
@@ -196,15 +203,12 @@ function drawAxes(
   ctx.fillStyle = '#888'
   ctx.font = '11px system-ui, sans-serif'
   ctx.lineWidth = 1
-
-  // Plot frame
   ctx.beginPath()
   ctx.moveTo(PADDING.left, PADDING.top)
   ctx.lineTo(PADDING.left, height - PADDING.bottom)
   ctx.lineTo(width - PADDING.right, height - PADDING.bottom)
   ctx.stroke()
 
-  // X ticks (5 evenly spaced)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   for (let i = 0; i <= 5; i++) {
@@ -217,7 +221,6 @@ function drawAxes(
     ctx.fillText(formatTick(v), x, height - PADDING.bottom + 6)
   }
 
-  // Y ticks
   ctx.textAlign = 'right'
   ctx.textBaseline = 'middle'
   for (let i = 0; i <= 5; i++) {
@@ -230,7 +233,6 @@ function drawAxes(
     ctx.fillText(formatTick(v), PADDING.left - 6, y)
   }
 
-  // Axis labels
   ctx.fillStyle = '#aaa'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
