@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
+import { OrbitControls, TrackballControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
+import { FreeRotateControls } from './FreeRotateControls.tsx'
 import { Vector3 } from 'three'
 import type { LatticeMatrix } from '../types.ts'
 import type { VolumeData } from '../types.ts'
@@ -94,6 +95,9 @@ interface DensityViewerProps {
   surfaceOpacityOverride?: number | null
   /** When set, atoms of this element render normally; others fade aggressively. */
   highlightElement?: string | null
+  /** Rotation controller flavor: 'orbit' (spherical, pole-clamped), 'trackball'
+   *  (drei TrackballControls, no up-vector), 'free' (custom quaternion rigid-body). */
+  rotMode?: 'orbit' | 'trackball' | 'free'
 }
 
 export function DensityViewer({
@@ -132,6 +136,7 @@ export function DensityViewer({
   surfaceColor,
   surfaceOpacityOverride,
   highlightElement,
+  rotMode = 'orbit',
 }: DensityViewerProps) {
   const tiles = useMemo(() => {
     if (tilePadding <= 0) return undefined
@@ -200,7 +205,9 @@ export function DensityViewer({
           <SliceSignUpdater lattice={volume.lattice} sliceAxis={sliceAxis} signRef={sliceStepSignRef} />
         )}
 
-        <OrbitControls makeDefault target={center.toArray()} />
+        {rotMode === 'orbit' && <OrbitControls makeDefault target={center.toArray()} />}
+        {rotMode === 'trackball' && <TrackballControls makeDefault target={center.toArray()} />}
+        {rotMode === 'free' && <FreeRotateControls target={center.toArray()} />}
         <GizmoHelper alignment="bottom-right" margin={[80, 36]}>
           <GizmoViewport axisHeadScale={0.8} labelColor="white" />
           {!abcIsXyz && (

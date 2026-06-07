@@ -240,6 +240,10 @@ export default function App() {
   const [panStep, setPanStep] = useUrlState('pd', floatParam({ default: 0, encoding: 'string', decimals: 1 }))
   const [rollDeg, setRollDeg] = useUrlState('rd', intParam(0))
   const [animDuration, setAnimDuration] = useUrlState('a', floatParam({ default: 0.5, encoding: 'string', decimals: 1 }))
+  const [rotMode, setRotMode] = useUrlState('rot', stringParam('orbit')) as [
+    'orbit' | 'trackball' | 'free',
+    (v: 'orbit' | 'trackball' | 'free') => void,
+  ]
   const [sweepMode, setSweepMode] = useUrlState('sm', stringParam('d'))
   const [sweepDuration, setSweepDuration] = useUrlState('sd', floatParam({ default: 2, encoding: 'string', decimals: 1 }), { debounce: 300 })
   const [sliceSpeed, setSliceSpeed] = useUrlState('ss', intParam(120))
@@ -1555,6 +1559,7 @@ export default function App() {
                   heatmapLowCutoff={heatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}
                   heatmapOpacity={heatmapOpacity}
+                  rotMode={rotMode}
                   glbUrl={glbUrl}
                   surfaceColor={sampledColor?.color ?? null}
                   surfaceOpacityOverride={sampledColor?.opacity ?? null}
@@ -1738,6 +1743,8 @@ export default function App() {
               onHeatmapOpacityChange={setHeatmapOpacity}
               useZarr={useZarr}
               onUseZarrChange={setUseZarr}
+              rotMode={rotMode}
+              onRotModeChange={setRotMode}
             />
           </ErrorBoundary>
         )}

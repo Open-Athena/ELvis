@@ -90,6 +90,9 @@ interface ControlsProps {
   /** Zarr data-source toggle (prefer chunked multi-res zarr where available). */
   useZarr?: boolean
   onUseZarrChange?: (v: boolean) => void
+  /** Rotation controller flavor. */
+  rotMode?: 'orbit' | 'trackball' | 'free'
+  onRotModeChange?: (v: 'orbit' | 'trackball' | 'free') => void
 }
 
 const AXIS_LABELS = ['X', 'Y', 'Z'] as const
@@ -173,6 +176,8 @@ export function Controls({
   onHeatmapStepCountChange,
   useZarr,
   onUseZarrChange,
+  rotMode,
+  onRotModeChange,
 }: ControlsProps) {
   const tp = tilePadding ?? 0
   const hasTiling = tp > 0
@@ -516,6 +521,20 @@ export function Controls({
       )}
 
       <DrawerSection id="camera" title="Camera" icon={<Camera size={ICON_SIZE} />} accent={ACCENT.camera} defaultOpen>
+          {onRotModeChange && (
+            <label className={styles.controlLabel} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span title="orbit: spherical, pole-clamped (default). trackball: drei TrackballControls (no up vector). free: custom quaternion rigid-body — drag rotates around current view, no poles">Rotate:</span>
+              <select
+                value={rotMode ?? 'orbit'}
+                onChange={e => onRotModeChange(e.target.value as 'orbit' | 'trackball' | 'free')}
+                style={{ background: '#2a2a3e', color: '#ccc', border: '1px solid #555', borderRadius: 3, fontSize: 12, padding: '2px 4px' }}
+              >
+                <option value="orbit">orbit (spherical)</option>
+                <option value="trackball">trackball</option>
+                <option value="free">free (quaternion)</option>
+              </select>
+            </label>
+          )}
           <label className={styles.toggle}>
             <input type="checkbox" checked={orbitDeg > 0} onChange={e => onOrbitDegChange(e.target.checked ? 90 : 0)} />
             Orbit step{orbitDeg > 0 && <>:
