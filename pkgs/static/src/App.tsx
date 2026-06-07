@@ -214,11 +214,11 @@ export default function App() {
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
   const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
   const [useGlbPreview, setUseGlbPreview] = useUrlState('glb', boolParam)
-  const [useHeatmap, setUseHeatmap] = useUrlState('heat', boolParam)
+  const [useHeatmap, setUseHeatmap] = useUrlState('heat', boolTrueParam)
   const [heatmapGamma, setHeatmapGamma] = useUrlState('hg', floatParam({ default: 2.5, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapLowCutoff, setHeatmapLowCutoff] = useUrlState('hl', floatParam({ default: 0, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapStepCount, setHeatmapStepCount] = useUrlState('hs', intParam(256), { debounce: 100 })
-  const [useZarr, setUseZarr] = useUrlState('zarr', boolParam)
+  const [useZarr, setUseZarr] = useUrlState('zarr', boolTrueParam)
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
   const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
@@ -256,9 +256,8 @@ export default function App() {
   // Condensed pattern (`?s3=...{a,b}...` for brace expand, `*` or trailing-prefix for LIST).
   // Only consulted when v0/v1 are empty; explicit overrides always win.
   const [s3Pattern, setS3Pattern] = useUrlState('s3', stringParam(''))
-  // Effective slice visibility resolves the tri-state: explicit URL wins, else default
-  // depends on srcRole (off in diff because the slice fights the volumetric heatmap).
-  const showSlice = showSliceUrl ?? (srcRole !== 'diff')
+  // Slice off by default — the volumetric heatmap is the primary cue, slice is opt-in.
+  const showSlice = showSliceUrl ?? false
   // Auto-resolve label/input URLs from the current material — used as DiffSources defaults
   // and as fallbacks when v0Url/v1Url overrides are empty.
   const currentRecord = useMemo<MaterialRecord | null>(() => {
@@ -624,7 +623,10 @@ export default function App() {
         // Diff load is driven by the srcRole effect; nothing to do here.
         return
       }
-      const url = resolveLoadUrl(record, next, useZarr ? 'zarr' : 'chgcar')
+      // Prefer zarr where available, fall back to chgcar (mp-public-only materials etc.).
+      const url = useZarr
+        ? (resolveLoadUrl(record, next, 'zarr') ?? resolveLoadUrl(record, next, 'chgcar'))
+        : resolveLoadUrl(record, next, 'chgcar')
       if (url) handleUrlSubmit(url)
     },
   })
@@ -1720,12 +1722,15 @@ export default function App() {
               highlightElement={highlightElement}
               onHighlightElementChange={setHighlightElement}
               useHeatmap={useHeatmap}
+              onUseHeatmapChange={setUseHeatmap}
               heatmapGamma={heatmapGamma}
               onHeatmapGammaChange={setHeatmapGamma}
               heatmapLowCutoff={heatmapLowCutoff}
               onHeatmapLowCutoffChange={setHeatmapLowCutoff}
               heatmapStepCount={heatmapStepCount}
               onHeatmapStepCountChange={setHeatmapStepCount}
+              useZarr={useZarr}
+              onUseZarrChange={setUseZarr}
             />
           </ErrorBoundary>
         )}

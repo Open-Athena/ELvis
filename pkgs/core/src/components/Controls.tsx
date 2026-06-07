@@ -78,12 +78,16 @@ interface ControlsProps {
   onHighlightElementChange?: (el: string | null) => void
   /** Heatmap-mode params (only meaningful when heatmap mode is on). */
   useHeatmap?: boolean
+  onUseHeatmapChange?: (v: boolean) => void
   heatmapGamma?: number
   onHeatmapGammaChange?: (v: number) => void
   heatmapLowCutoff?: number
   onHeatmapLowCutoffChange?: (v: number) => void
   heatmapStepCount?: number
   onHeatmapStepCountChange?: (v: number) => void
+  /** Zarr data-source toggle (prefer chunked multi-res zarr where available). */
+  useZarr?: boolean
+  onUseZarrChange?: (v: boolean) => void
 }
 
 const AXIS_LABELS = ['X', 'Y', 'Z'] as const
@@ -156,12 +160,15 @@ export function Controls({
   highlightElement: _highlightElement,
   onHighlightElementChange,
   useHeatmap,
+  onUseHeatmapChange,
   heatmapGamma = 2.5,
   onHeatmapGammaChange,
   heatmapLowCutoff = 0,
   onHeatmapLowCutoffChange,
   heatmapStepCount = 256,
   onHeatmapStepCountChange,
+  useZarr,
+  onUseZarrChange,
 }: ControlsProps) {
   const tp = tilePadding ?? 0
   const hasTiling = tp > 0
@@ -328,8 +335,13 @@ export function Controls({
           </div>
         </DrawerSection>
 
-      {useHeatmap && onHeatmapGammaChange && onHeatmapLowCutoffChange && onHeatmapStepCountChange && (
+      {onUseHeatmapChange && (
         <DrawerSection id="heatmap" title="Heatmap" icon={<Flame size={ICON_SIZE} />} accent={ACCENT.heatmap} defaultOpen={false}>
+          <label className={styles.toggle}>
+            <input type="checkbox" checked={!!useHeatmap} onChange={e => onUseHeatmapChange(e.target.checked)} />
+            Volumetric heatmap
+          </label>
+          {useHeatmap && onHeatmapGammaChange && onHeatmapLowCutoffChange && onHeatmapStepCountChange && (<>
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
                 <span>Gamma: {heatmapGamma.toFixed(2)}</span>
@@ -396,6 +408,7 @@ export function Controls({
                 className={styles.slider}
               />
             </div>
+          </>)}
         </DrawerSection>
       )}
 
@@ -424,6 +437,13 @@ export function Controls({
             <input type="checkbox" checked={dashedLines} onChange={e => onDashedLinesChange(e.target.checked)} />
             Dashed outlines
           </label>
+
+          {onUseZarrChange && (
+            <label className={styles.toggle}>
+              <input type="checkbox" checked={!!useZarr} onChange={e => onUseZarrChange(e.target.checked)} />
+              Zarr (multi-res)
+            </label>
+          )}
         </DrawerSection>
 
       {onTilePaddingChange && (

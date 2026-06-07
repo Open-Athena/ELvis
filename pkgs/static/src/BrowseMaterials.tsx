@@ -69,7 +69,10 @@ export function BrowseMaterials({ open, onClose, onSelect, role = 'label', forma
   }
 
   const handleRowClick = (r: MaterialRecord) => {
-    const url = resolveLoadUrl(r, role, format)
+    // Prefer zarr where available; fall back to chgcar (mp-public-only materials etc.).
+    const url = format === 'zarr'
+      ? (resolveLoadUrl(r, role, 'zarr') ?? resolveLoadUrl(r, role, 'chgcar'))
+      : resolveLoadUrl(r, role, format)
     if (!url) return
     onSelect(url)
     onClose()

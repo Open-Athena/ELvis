@@ -38,7 +38,10 @@ export function MaterialsSearch({ onSelect, role = 'label', format = 'chgcar' }:
       const page = hits.slice(pagination.offset, pagination.offset + pagination.limit)
       return {
         entries: page.map(r => {
-          const url = resolveLoadUrl(r, role, format)
+          // Prefer zarr where available; fall back to chgcar (mp-public-only materials etc.).
+          const url = format === 'zarr'
+            ? (resolveLoadUrl(r, role, 'zarr') ?? resolveLoadUrl(r, role, 'chgcar'))
+            : resolveLoadUrl(r, role, format)
           return {
             id: r.id,
             label: `${r.id}  ${r.formula}`,
