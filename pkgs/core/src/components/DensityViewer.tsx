@@ -83,6 +83,8 @@ interface DensityViewerProps {
   heatmapLowCutoff?: number
   /** Ray-march sample count. */
   heatmapStepCount?: number
+  /** Heatmap per-sample opacity scalar (independent of iso-surface `opacity`). */
+  heatmapOpacity?: number
   /** Units suffix for the heatmap legend (e.g. "e/Å³"). */
   heatmapUnits?: string
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
@@ -124,6 +126,7 @@ export function DensityViewer({
   heatmapGamma,
   heatmapLowCutoff,
   heatmapStepCount,
+  heatmapOpacity,
   heatmapUnits,
   glbUrl,
   surfaceColor,
@@ -182,7 +185,7 @@ export function DensityViewer({
         {glbUrl
           ? <GlbPreviewRenderer url={glbUrl} opacity={surfaceOpacityOverride ?? opacity} color={surfaceColor ?? undefined} />
           : useHeatmap
-            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? heatmapOpacity ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
             : useGpuVolume
               ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
               : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />

@@ -79,6 +79,8 @@ interface ControlsProps {
   /** Heatmap-mode params (only meaningful when heatmap mode is on). */
   useHeatmap?: boolean
   onUseHeatmapChange?: (v: boolean) => void
+  heatmapOpacity?: number
+  onHeatmapOpacityChange?: (v: number) => void
   heatmapGamma?: number
   onHeatmapGammaChange?: (v: number) => void
   heatmapLowCutoff?: number
@@ -161,6 +163,8 @@ export function Controls({
   onHighlightElementChange,
   useHeatmap,
   onUseHeatmapChange,
+  heatmapOpacity = 0.4,
+  onHeatmapOpacityChange,
   heatmapGamma = 2.5,
   onHeatmapGammaChange,
   heatmapLowCutoff = 0,
@@ -342,9 +346,33 @@ export function Controls({
             Volumetric heatmap
           </label>
           {useHeatmap && onHeatmapGammaChange && onHeatmapLowCutoffChange && onHeatmapStepCountChange && (<>
+            {onHeatmapOpacityChange && (
+              <div className={styles.controlLabel}>
+                <div className={styles.sliderHeader}>
+                  <span title="Per-sample opacity scalar — lower lets rays of sight see further into the volume">Opacity: {heatmapOpacity.toFixed(2)}</span>
+                  <button
+                    className={styles.resetBtn}
+                    onClick={() => onHeatmapOpacityChange(0.4)}
+                    title="Reset to 0.40"
+                    disabled={Math.abs(heatmapOpacity - 0.4) <= 0.005}
+                  >
+                    <ResetIcon />
+                  </button>
+                </div>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={1}
+                  step={0.01}
+                  value={heatmapOpacity}
+                  onChange={e => onHeatmapOpacityChange(parseFloat(e.target.value))}
+                  className={styles.slider}
+                />
+              </div>
+            )}
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
-                <span>Gamma: {heatmapGamma.toFixed(2)}</span>
+                <span title="Power exponent on per-sample alpha (higher = high-density tail dominates)">Gamma: {heatmapGamma.toFixed(2)}</span>
                 <button
                   className={styles.resetBtn}
                   onClick={() => onHeatmapGammaChange(2.5)}
@@ -366,7 +394,7 @@ export function Controls({
             </div>
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
-                <span>Low cutoff: {heatmapLowCutoff.toFixed(2)}</span>
+                <span title="Densities below this fraction contribute zero alpha (hard threshold)">Low cutoff: {heatmapLowCutoff.toFixed(2)}</span>
                 <button
                   className={styles.resetBtn}
                   onClick={() => onHeatmapLowCutoffChange(0)}
@@ -388,7 +416,7 @@ export function Controls({
             </div>
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
-                <span>Steps: {heatmapStepCount}</span>
+                <span title="Ray-march sample count — higher is smoother but slower">Steps: {heatmapStepCount}</span>
                 <button
                   className={styles.resetBtn}
                   onClick={() => onHeatmapStepCountChange(256)}

@@ -357,9 +357,12 @@ function AtomInstances({ element, positions, opacity = 1 }: { element: string; p
   }, [positions, dummy])
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} renderOrder={1}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} renderOrder={10}>
       <sphereGeometry args={[radius * 0.4, 16, 12]} />
-      <meshStandardMaterial color={new Color(color)} transparent={opacity < 1} opacity={opacity} depthWrite />
+      {/* `transparent` + high renderOrder puts atoms in the transparent bucket AFTER the
+          volume heatmap (which has implicit renderOrder=0). Without this, the heatmap
+          fragment alpha-blends *over* the already-drawn opaque atom, tinting it. */}
+      <meshStandardMaterial color={new Color(color)} transparent opacity={opacity} />
     </instancedMesh>
   )
 }

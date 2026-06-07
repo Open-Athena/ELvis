@@ -218,6 +218,10 @@ export default function App() {
   const [heatmapGamma, setHeatmapGamma] = useUrlState('hg', floatParam({ default: 2.5, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapLowCutoff, setHeatmapLowCutoff] = useUrlState('hl', floatParam({ default: 0, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapStepCount, setHeatmapStepCount] = useUrlState('hs', intParam(256), { debounce: 100 })
+  // Heatmap opacity is separate from `op` (isosurface opacity) so the two modes can
+  // have different defaults — the heatmap is fog-like and benefits from being more
+  // translucent than a hard iso-surface.
+  const [heatmapOpacity, setHeatmapOpacity] = useUrlState('ho', floatParam({ default: 0.4, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [useZarr, setUseZarr] = useUrlState('zarr', boolTrueParam)
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
@@ -1550,6 +1554,7 @@ export default function App() {
                   heatmapGamma={heatmapGamma}
                   heatmapLowCutoff={heatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}
+                  heatmapOpacity={heatmapOpacity}
                   glbUrl={glbUrl}
                   surfaceColor={sampledColor?.color ?? null}
                   surfaceOpacityOverride={sampledColor?.opacity ?? null}
@@ -1729,6 +1734,8 @@ export default function App() {
               onHeatmapLowCutoffChange={setHeatmapLowCutoff}
               heatmapStepCount={heatmapStepCount}
               onHeatmapStepCountChange={setHeatmapStepCount}
+              heatmapOpacity={heatmapOpacity}
+              onHeatmapOpacityChange={setHeatmapOpacity}
               useZarr={useZarr}
               onUseZarrChange={setUseZarr}
             />
