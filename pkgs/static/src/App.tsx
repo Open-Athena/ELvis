@@ -1801,12 +1801,12 @@ export default function App() {
         onCancel={() => setSizeConfirm(null)}
       />
 
-      <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} />
+      <ShortcutsModal editable arrowIcon="move" TooltipComponent={MuiTooltip} defaultBinding="?" />
       <MaterialsSearch onSelect={handleUrlSubmit} role={srcRole === 'diff' ? 'label' : srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
       <BrowseMaterials open={browseOpen} onClose={() => setBrowseOpen(false)} onSelect={handleUrlSubmit} role={srcRole === 'diff' ? 'label' : srcRole} format={useZarr ? 'zarr' : 'chgcar'} />
       <Omnibar />
       <SequenceModal />
-      <LookupModal />
+      <LookupModal defaultBinding="/" />
       <SpeedDial actions={speedDialActions} />
       <ModeIndicator />
     </div>
