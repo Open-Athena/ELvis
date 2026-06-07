@@ -221,12 +221,15 @@ void main() {
         float d = chebyshevDist(fracP);
         if (d > 0.0) {
           float t = clamp(d / uPadding, 0.0, 1.0);
-          // Linear-pow falloff over the full padding range -- matches atomOpacity
-          // (utils/tiling.ts:29) exactly, so atoms and volume fade in lockstep.
-          // Previously this had an extra smoothstep cutoff to 0 at 0.85*padding
-          // which left atoms rendering past where the volume contributed, so the
-          // faded atoms read as muddy gray against the black void out there.
-          a *= pow(1.0 - t, uFade);
+          // Two-part fade. linearFade matches atomOpacity (utils/tiling.ts:29)
+          // so atoms and volume reach 0 together at t=1. shellCutoff adds extra
+          // attenuation in the outermost shell to suppress the front-shell red
+          // rim caused by grazing rays integrating high-val periodic copies
+          // (via fract() sampling) in the padding region. The smoothstep ends
+          // at 1.0 so it does not zero the volume before atoms do.
+          float linearFade = pow(1.0 - t, uFade);
+          float shellCutoff = 1.0 - smoothstep(0.7, 1.0, t);
+          a *= linearFade * shellCutoff;
         }
       }
 
