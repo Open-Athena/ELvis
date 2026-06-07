@@ -1,7 +1,29 @@
 # Spec — tomat predictions drill-down
 
-**Status**: ready to implement. Companion to tomat's
+**Status**: Option B landed (commit `aeff80b`). Companion to tomat's
 `specs/51-eval-pred-r2-elvis-drilldown.md`.
+
+## Implementation notes (what shipped)
+
+- `pkgs/static/src/utils/fetch-volume.ts` exports `toFetchUrl(uri)`:
+  `s3://...` → anonymous HTTPS rewrite; `http(s)://...` →
+  pass-through; else throw. The original `s3UriToHttps` is kept
+  for callers that know the URI is `s3://`.
+- `pkgs/static/src/App.tsx` uses `toFetchUrl` at the diff
+  zarr-fetch (lines 1226-1227) and the single-volume zarr loader
+  (line 1294). The non-zarr CHGCAR paths still take `s3://`
+  explicitly (credentialed `fetchVolumeFromS3` / `fetchVolumeJsonGz`).
+- Verified locally: `?v0=https://example.invalid/gt.zarr/&v1=https://example.invalid/pred.zarr/&src=diff`
+  fires real network requests at the literal HTTPS URLs (fails with
+  "Failed to fetch", not "Invalid S3 URI").
+
+**Diff convention drift to confirm with tomat side.** Spec below
+phrases the diff as `|GT − pred|` (abs). Current elvis code is
+*signed* `v1 − v0` (per `App.tsx:1236-1239`, since `1650d37`/`a141f17`).
+With the spec's prescribed `v0=GT, v1=pred` mapping, the actual
+rendered diff is `pred − GT` → green where pred overpredicts,
+red where pred underpredicts. Tomat side should pick the v0/v1
+ordering deliberately based on which colour story it wants.
 
 ## Goal
 
