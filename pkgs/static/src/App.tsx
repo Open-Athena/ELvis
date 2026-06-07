@@ -179,6 +179,7 @@ const DEFAULT_MP_ID = 'mp-1000020'
 interface Example { mpId: string; label: string; source?: MpSource }
 
 const EXAMPLES: Example[] = [
+  { mpId: 'mp-2375705', label: 'Si\u2082 (covalent, clear bonds)' },
   { mpId: 'mp-1000020', label: 'Fe\u2082Cu\u2082O\u2084 (8 MB)' },
   { mpId: 'mp-1828986', label: 'Na\u2082Al\u2082Si\u2084O\u2081\u2082 (10 MB)' },
   { mpId: 'mp-1000005', label: '17 MB' },
@@ -1094,6 +1095,20 @@ export default function App() {
     group: 'Camera',
     defaultBindings: ['r'],
     handler: () => { setCamTarget(null); snapCamera({ type: 'reset-pan' }) },
+  })
+  useAction('nav:cycle-rot-mode', {
+    label: 'Cycle rotation mode',
+    description: 'orbit → trackball → free (quaternion) → orbit',
+    keywords: ['rotate', 'rotation', 'orbit', 'trackball', 'quaternion', 'free', 'pole'],
+    group: 'Camera',
+    defaultBindings: ['shift+r'],
+    handler: () => {
+      const next: 'orbit' | 'trackball' | 'free' =
+        rotMode === 'orbit' ? 'trackball'
+        : rotMode === 'trackball' ? 'free'
+        : 'orbit'
+      setRotMode(next)
+    },
   })
 
   // Auto-restore on mount: ?m= param (OPFS cache → fetch) or last active OPFS volume
