@@ -205,6 +205,26 @@ void main() {
     vec3 texCoord = fract(fracP);
     float val = clamp(texture(uVolume, texCoord).r, 0.0, 1.0);
 
+    // Padding fade: in the padding region, pull val toward the neutral value
+    // (0 in unsigned mode, 0.5 in signed mode) so periodic-copy bond regions
+    // do not show up as bright as the cell interior. This dims color (turbo
+    // shifts toward cool) and, because baseA = val^gamma, sharply reduces
+    // alpha too. linearFade matches atomOpacity (utils/tiling.ts:29) so atoms
+    // and volume reach the neutral state together at t=1. shellCutoff adds
+    // extra attenuation in the outermost shell to suppress the front-shell
+    // rim caused by grazing rays through high-val periodic copies.
+    if (uPadding > 0.0 && uFade > 0.0) {
+      float d = chebyshevDist(fracP);
+      if (d > 0.0) {
+        float t = clamp(d / uPadding, 0.0, 1.0);
+        float linearFade = pow(1.0 - t, uFade);
+        float shellCutoff = 1.0 - smoothstep(0.7, 1.0, t);
+        float effFade = linearFade * shellCutoff;
+        float neutralVal = uSigned > 0 ? 0.5 : 0.0;
+        val = mix(neutralVal, val, effFade);
+      }
+    }
+
     // In signed (diverging) mode the texture stores values centered at 0.5
     // (val=0.5 == raw 0). Color always uses val so 0 lands at turbo's mid-point;
     // alpha gates on abs(val - 0.5) * 2 so the near-zero band is transparent.
@@ -216,22 +236,6 @@ void main() {
       float v = clamp((effVal - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4), 0.0, 1.0);
       float baseA = pow(v, uGamma) * uOpacity;
       float a = 1.0 - pow(max(1.0 - baseA, 0.0), dt / dtRef);
-
-      if (uPadding > 0.0 && uFade > 0.0) {
-        float d = chebyshevDist(fracP);
-        if (d > 0.0) {
-          float t = clamp(d / uPadding, 0.0, 1.0);
-          // Two-part fade. linearFade matches atomOpacity (utils/tiling.ts:29)
-          // so atoms and volume reach 0 together at t=1. shellCutoff adds extra
-          // attenuation in the outermost shell to suppress the front-shell red
-          // rim caused by grazing rays integrating high-val periodic copies
-          // (via fract() sampling) in the padding region. The smoothstep ends
-          // at 1.0 so it does not zero the volume before atoms do.
-          float linearFade = pow(1.0 - t, uFade);
-          float shellCutoff = 1.0 - smoothstep(0.7, 1.0, t);
-          a *= linearFade * shellCutoff;
-        }
-      }
 
       acc.rgb += (1.0 - acc.a) * col * a;
       acc.a   += (1.0 - acc.a) * a;

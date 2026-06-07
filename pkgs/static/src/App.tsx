@@ -216,7 +216,7 @@ export default function App() {
   const [useGlbPreview, setUseGlbPreview] = useUrlState('glb', boolParam)
   const [useHeatmap, setUseHeatmap] = useUrlState('heat', boolTrueParam)
   const [heatmapGamma, setHeatmapGamma] = useUrlState('hg', floatParam({ default: 2.5, encoding: 'string', decimals: 2 }), { debounce: 100 })
-  const [heatmapLowCutoff, setHeatmapLowCutoff] = useUrlState('hl', floatParam({ default: 0, encoding: 'string', decimals: 2 }), { debounce: 100 })
+  const [heatmapLowCutoff, setHeatmapLowCutoff] = useUrlState('hl', floatParam({ default: 0.25, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapStepCount, setHeatmapStepCount] = useUrlState('hs', intParam(256), { debounce: 100 })
   // Heatmap opacity is separate from `op` (isosurface opacity) so the two modes can
   // have different defaults — the heatmap is fog-like and benefits from being more
