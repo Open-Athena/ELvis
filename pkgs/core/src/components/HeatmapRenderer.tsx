@@ -221,14 +221,12 @@ void main() {
         float d = chebyshevDist(fracP);
         if (d > 0.0) {
           float t = clamp(d / uPadding, 0.0, 1.0);
-          // Linear-pow falloff (uFade slider controls strength) PLUS a smoothstep
-          // cutoff that forces alpha to zero past ~half the padding. Without the
-          // cutoff, the front-shell accumulates enough alpha to paint visible
-          // patterns on the outer bounding-box faces (especially when atom-clip
-          // terminates rays inside the cell, exposing only the shell contribution).
-          float linearFade = pow(1.0 - t, uFade);
-          float shellCutoff = 1.0 - smoothstep(0.4, 0.85, t);
-          a *= linearFade * shellCutoff;
+          // Linear-pow falloff over the full padding range -- matches atomOpacity
+          // (utils/tiling.ts:29) exactly, so atoms and volume fade in lockstep.
+          // Previously this had an extra smoothstep cutoff to 0 at 0.85*padding
+          // which left atoms rendering past where the volume contributed, so the
+          // faded atoms read as muddy gray against the black void out there.
+          a *= pow(1.0 - t, uFade);
         }
       }
 
