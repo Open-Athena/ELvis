@@ -33,7 +33,7 @@ import { useUrlState, floatParam, optFloatParam, boolParam, intParam, optIntPara
 import type { Param } from 'use-prms'
 import { OpfsVolumeStore, isOPFSSupported } from './storage/OpfsVolumeStore.ts'
 import { loadCredentials, saveCredentials } from './utils/aws-credentials.ts'
-import { fetchVolumeFromUrl, fetchVolumeFromS3, s3UriToHttps, fetchVolumeJsonGz } from './utils/fetch-volume.ts'
+import { fetchVolumeFromUrl, fetchVolumeFromS3, s3UriToHttps, toFetchUrl, fetchVolumeJsonGz } from './utils/fetch-volume.ts'
 import { decompressGzip } from './utils/gzip.ts'
 import { SSOAuthFlow } from './components/SSOAuthFlow.tsx'
 import { MaterialsSearch, MATERIALS_MANIFEST } from './MaterialsSearch.tsx'
@@ -1223,8 +1223,8 @@ export default function App() {
         return
       }
       const [a, b] = await Promise.all([
-        fetchZarrVolume(s3UriToHttps(v0Resolved)),
-        fetchZarrVolume(s3UriToHttps(v1Resolved)),
+        fetchZarrVolume(toFetchUrl(v0Resolved)),
+        fetchZarrVolume(toFetchUrl(v1Resolved)),
       ])
       const dA = a.grid.dims, dB = b.grid.dims
       if (dA[0] !== dB[0] || dA[1] !== dB[1] || dA[2] !== dB[2]) {
@@ -1291,7 +1291,7 @@ export default function App() {
       const isZarr = /\.zarr\/?$/i.test(url)
 
       if (isZarr) {
-        const httpsUrl = url.startsWith('s3://') ? s3UriToHttps(url) : url
+        const httpsUrl = toFetchUrl(url)
         setFetchStatus('Loading Zarr...')
         const data = await fetchZarrVolume(httpsUrl)
         const filename = data.title

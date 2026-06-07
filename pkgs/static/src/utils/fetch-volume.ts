@@ -22,6 +22,14 @@ export function s3UriToHttps(uri: string): string {
   return `https://${bucket}.s3.amazonaws.com/${key}`
 }
 
+/** Resolve any supported volume URI to a fetchable HTTPS URL.
+ *  `s3://...` rewrites to anonymous HTTPS; `http(s)://...` passes through unchanged. */
+export function toFetchUrl(uri: string): string {
+  if (uri.startsWith('s3://')) return s3UriToHttps(uri)
+  if (uri.startsWith('https://') || uri.startsWith('http://')) return uri
+  throw new Error(`Unsupported URI scheme: ${uri}`)
+}
+
 /** Fetch a .json.gz file, decompress, and parse JSON. Returns the blob (for caching), parsed JSON, and filename. */
 export async function fetchVolumeJsonGz(
   url: string,
