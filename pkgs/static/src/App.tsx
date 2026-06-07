@@ -223,6 +223,9 @@ export default function App() {
   // have different defaults — the heatmap is fog-like and benefits from being more
   // translucent than a hard iso-surface.
   const [heatmapOpacity, setHeatmapOpacity] = useUrlState('ho', floatParam({ default: 0.4, encoding: 'string', decimals: 2 }), { debounce: 100 })
+  // Histogram-equalize density distribution before colormapping. Default on
+  // (huge win for high-dynamic-range materials like oxides). `?he=` forces off.
+  const [heatmapEqualize] = useUrlState('he', boolTrueParam)
   const [useZarr, setUseZarr] = useUrlState('zarr', boolTrueParam)
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
   const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
@@ -1574,6 +1577,7 @@ export default function App() {
                   heatmapLowCutoff={heatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}
                   heatmapOpacity={heatmapOpacity}
+                  heatmapEqualize={heatmapEqualize}
                   rotMode={rotMode}
                   glbUrl={glbUrl}
                   surfaceColor={sampledColor?.color ?? null}

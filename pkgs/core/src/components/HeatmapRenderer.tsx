@@ -1,9 +1,9 @@
 import { useMemo, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import {
-  Data3DTexture, RedFormat, FloatType, LinearFilter, ClampToEdgeWrapping,
+  Data3DTexture, DataTexture, RedFormat, FloatType, LinearFilter, ClampToEdgeWrapping,
   ShaderMaterial, Matrix4, Vector3, Vector4, DoubleSide, BufferGeometry,
-  Float32BufferAttribute,
+  Float32BufferAttribute, UVMapping,
 } from 'three'
 import type { VolumeData } from '../types.ts'
 import { fracToCart } from '../utils/lattice.ts'
@@ -27,6 +27,14 @@ interface HeatmapRendererProps {
   lowCutoff?: number
   /** Number of ray-march samples per pixel. Higher = smoother but slower. */
   stepCount?: number
+  /** Histogram-equalize the density distribution before colormapping. When true,
+   *  the shader passes raw normalized val through a CDF LUT so each turbo hue
+   *  band covers equal *voxel count* rather than equal density. Default true --
+   *  major fix for high-dynamic-range materials (metal oxides) where a few
+   *  nucleus spikes squash everything else to dark blue. Set false for raw
+   *  density linear mapping (legacy behavior). Unsigned mode only; signed
+   *  (diff) keeps its diverging mapping. */
+  equalize?: boolean
   /**
    * When true (default), terminate rays that enter an atom sphere. Prevents glow from
    * accumulating past atoms (visible artifact when atoms are opaque). Set false to render
@@ -92,6 +100,9 @@ precision highp sampler3D;
 #define MAX_ATOMS 128
 
 uniform sampler3D uVolume;
+// 256-entry 1D CDF LUT. Maps normalized density to its quantile position.
+// Identity LUT when equalize is off. Sampled with linear filter.
+uniform sampler2D uLUT;
 uniform mat4 uCartToFrac;
 uniform mat4 uFracToCart;
 uniform vec3 uCameraPos;
@@ -204,6 +215,9 @@ void main() {
 
     vec3 texCoord = fract(fracP);
     float val = clamp(texture(uVolume, texCoord).r, 0.0, 1.0);
+    // Histogram-equalize via the CDF LUT (skipped for signed/diff mode where
+    // the diverging colormap relies on 0.5 == zero, not on quantile position).
+    if (uSigned == 0) val = texture(uLUT, vec2(val, 0.5)).r;
 
     // Padding fade: in the padding region, pull val toward the neutral value
     // (0 in unsigned mode, 0.5 in signed mode) so periodic-copy bond regions
@@ -249,9 +263,36 @@ void main() {
 }
 `
 
+/** Build a 256-entry CDF LUT from the raw density samples. Maps normalized val
+ *  in [0, 1] to its quantile position. Sample-based for perf (deterministic
+ *  stride; LUT depends only on `data` and the [dataMin, dataMax] window). */
+function computeCDFLUT(data: Float32Array, dataMin: number, dataMax: number, lutSize = 256, sampleTarget = 16384): Float32Array {
+  const range = dataMax - dataMin || 1
+  const stride = Math.max(1, Math.floor(data.length / sampleTarget))
+  const nSamples = Math.floor(data.length / stride)
+  const samples = new Float32Array(nSamples)
+  for (let i = 0, j = 0; i < nSamples; i++, j += stride) {
+    samples[i] = (data[j] - dataMin) / range
+  }
+  samples.sort()
+  const lut = new Float32Array(lutSize)
+  for (let i = 0; i < lutSize; i++) {
+    const v = i / (lutSize - 1)
+    // Binary search for first sample >= v.
+    let lo = 0, hi = nSamples
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (samples[mid] < v) lo = mid + 1
+      else hi = mid
+    }
+    lut[i] = lo / Math.max(nSamples - 1, 1)
+  }
+  return lut
+}
+
 export function HeatmapRenderer({
   volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
-  clipAtoms = true,
+  clipAtoms = true, equalize = true,
   tiles: _tiles, tilePadding = 0, tileFade = 1,
 }: HeatmapRendererProps) {
   const { camera } = useThree()
@@ -274,6 +315,20 @@ export function HeatmapRenderer({
     tex.needsUpdate = true
     return tex
   }, [data, dims, dataMin, dataMax])
+
+  // CDF LUT for histogram equalization. Computed once per dataset; safe to
+  // skip if `equalize=false` (uniform-identity LUT is cheap to keep around).
+  const lutTexture = useMemo(() => {
+    const lut = equalize ? computeCDFLUT(data, dataMin, dataMax) : (() => {
+      const id = new Float32Array(256)
+      for (let i = 0; i < 256; i++) id[i] = i / 255
+      return id
+    })()
+    const tex = new DataTexture(lut, lut.length, 1, RedFormat, FloatType, UVMapping,
+      ClampToEdgeWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter)
+    tex.needsUpdate = true
+    return tex
+  }, [data, dataMin, dataMax, equalize])
 
   const cartToFrac = useMemo(() => {
     const L = volume.lattice
@@ -313,6 +368,7 @@ export function HeatmapRenderer({
 
   const uniforms = useMemo(() => ({
     uVolume: { value: texture },
+    uLUT: { value: lutTexture },
     uCartToFrac: { value: cartToFrac.clone() },
     uFracToCart: { value: fracToCartM.clone() },
     uCameraPos: { value: new Vector3() },
@@ -326,7 +382,7 @@ export function HeatmapRenderer({
     uAtomCount: { value: effectiveAtomCount },
     uAtoms: { value: atomsArray },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [texture])
+  }), [texture, lutTexture])
 
   useFrame(() => {
     const mat = matRef.current
