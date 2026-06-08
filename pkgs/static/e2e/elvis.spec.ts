@@ -61,8 +61,11 @@ async function waitForLoad(page: Page) {
 async function enterSliceMode(page: Page) {
   await page.locator('body').press('s')
   await expect(page.locator('.kbd-mode-indicator-label')).toHaveText('Slice')
-  // Allow one animation frame for the effective keymap to recompute after mode change
-  await page.waitForTimeout(100)
+  // Allow several animation frames so `SliceSignUpdater`'s useFrame can run
+  // and stabilize `sliceStepSign` based on the current camera projection.
+  // Without this, ArrowRight may fire while sign is still at its init value
+  // (1), making sign-dependent slice-direction tests flaky on CI.
+  await page.waitForTimeout(500)
 }
 
 test.describe('Elvis E2E', () => {
