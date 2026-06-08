@@ -48,9 +48,13 @@ async function waitForParam(
 
 /** Wait for material to finish loading and three.js scene to initialize. */
 async function waitForLoad(page: Page) {
-  await expect(page.getByText('mp-1000020.json.gz').first()).toBeVisible({ timeout: 15000 })
-  // Wait for the slice info to appear (proves grid data is parsed and maxSliceIndex is set)
-  await expect(page.getByText(/Slice: \d+ \/ 31/)).toBeVisible({ timeout: 10000 })
+  // The filename appears in the (default-closed) Cached Files drawer as well as
+  // the always-visible Controls panel title; `.last()` picks the visible one.
+  await expect(page.getByText('mp-1000020.json.gz').last()).toBeVisible({ timeout: 15000 })
+  // Iso info shows after grid data is parsed and density quantiles computed.
+  // Replaces the previous `Slice: X / 31` probe, which no longer renders since
+  // slice display defaults off (a40b788).
+  await expect(page.getByText(/Iso: \d+/)).toBeVisible({ timeout: 10000 })
 }
 
 /** Enter slice mode and wait for the keymap to be active. */
