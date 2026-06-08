@@ -203,20 +203,26 @@ void main() {
 
     vec3 fracP = fracOrigin + fracDir * t;
 
-    // Atom-sphere clip: stop the ray when it enters any atom sphere. Atoms are
-    // opaque and rendered separately; without this the heatmap accumulates glow
-    // *past* the camera-facing surface of an atom, which then bleeds in front
-    // of the atom because the heatmap fragment lives on the bounding-box face.
-    bool inAtom = false;
-    for (int a = 0; a < MAX_ATOMS; a++) {
-      if (a >= uAtomCount) break;
-      vec4 atom = uAtoms[a];
-      if (atomCartDist(fracP, atom.xyz) < atom.w) {
-        inAtom = true;
-        break;
+    // Atom-sphere clip: stop the ray when it enters an atom sphere in the
+    // PRIMARY cell. The geometry there renders at full opacity, so we do not
+    // want volume bleeding past its camera-facing surface. In the PADDING
+    // region (chebyshevDist over 0), tile-duplicate atoms are alpha-faded by
+    // atomOpacity, often to near-zero. If we clipped there too, the volume
+    // would carve atom-shaped holes that the nearly-invisible atom geometry
+    // cannot fill, leaving the bg showing through as glaring black voids.
+    // Primary cell clips; padding lets the volume flow through.
+    if (chebyshevDist(fracP) <= 0.0) {
+      bool inAtom = false;
+      for (int a = 0; a < MAX_ATOMS; a++) {
+        if (a >= uAtomCount) break;
+        vec4 atom = uAtoms[a];
+        if (atomCartDist(fracP, atom.xyz) < atom.w) {
+          inAtom = true;
+          break;
+        }
       }
+      if (inAtom) break;
     }
-    if (inAtom) break;
 
     vec3 texCoord = fract(fracP);
     float val = clamp(texture(uVolume, texCoord).r, 0.0, 1.0);
