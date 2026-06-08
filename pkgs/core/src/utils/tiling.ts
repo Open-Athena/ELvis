@@ -19,12 +19,24 @@ export function distFromPrimaryCell(frac: [number, number, number]): number {
   return Math.max(da, db, dc)
 }
 
+/** GLSL smoothstep equivalent. */
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
 /**
  * Compute per-atom opacity based on fractional position relative to the primary cell.
  * padding: how far beyond the primary cell boundary to show atoms.
  * fade: power exponent for fade curve. 0 = no fade (hard cutoff at padding edge),
  *       1 = linear, >1 = steep initial drop then gradual tail.
- *       opacity = (1 - d/padding)^fade
+ *       opacity = (1 - d/padding)^fade * shellCutoff
+ *
+ * The `shellCutoff` mirrors the heatmap shader's outer-shell smoothstep so
+ * atoms taper at the same rate as the volume. Without it, in the outer
+ * padding shell the atom is brighter than the volume around it, and the
+ * far-side pixels of an atom that pokes past the volume silhouette
+ * alpha-blend over black bg as nearly-black hemispheres.
  */
 export function atomOpacity(
   fracPos: [number, number, number],
@@ -34,7 +46,10 @@ export function atomOpacity(
   const dist = distFromPrimaryCell(fracPos)
   if (dist >= padding) return 0
   if (fade <= 0) return 1
-  return Math.pow(1 - dist / padding, fade)
+  const t = dist / padding
+  const linearFade = Math.pow(1 - t, fade)
+  const shellCutoff = 1 - smoothstep(0.7, 1.0, t)
+  return linearFade * shellCutoff
 }
 
 /**
