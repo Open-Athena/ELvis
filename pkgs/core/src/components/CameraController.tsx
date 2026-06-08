@@ -162,6 +162,13 @@ export function CameraController({
     if (!controls) return
     const target = controls.target
 
+    // No URL camera to apply -> camera is at its initial constructed position;
+    // mark ready immediately so projection-derived state (e.g. slice sign) is
+    // safe to read.
+    if (!initialCamera?.current) {
+      ;(window as unknown as { __elvisCameraReady?: boolean }).__elvisCameraReady = true
+    }
+
     // Initial camera setup from URL — re-apply for several frames to
     // override OrbitControls which may reset orientation on early frames
     if (initialCamera?.current && initFramesRef.current < 5) {
@@ -186,6 +193,9 @@ export function CameraController({
       if (initFramesRef.current >= 5) {
         initialCamera.current = null
         if (initialTargetOffset?.current) initialTargetOffset.current = null
+        // Signal "camera settled" for e2e tests that need to read derived
+        // camera state (e.g. SliceSignUpdater's projection-based sign).
+        ;(window as unknown as { __elvisCameraReady?: boolean }).__elvisCameraReady = true
       }
       return
     }

@@ -61,11 +61,11 @@ async function waitForLoad(page: Page) {
 async function enterSliceMode(page: Page) {
   await page.locator('body').press('s')
   await expect(page.locator('.kbd-mode-indicator-label')).toHaveText('Slice')
-  // Allow several animation frames so `SliceSignUpdater`'s useFrame can run
-  // and stabilize `sliceStepSign` based on the current camera projection.
-  // Without this, ArrowRight may fire while sign is still at its init value
-  // (1), making sign-dependent slice-direction tests flaky on CI.
-  await page.waitForTimeout(500)
+  // Wait for `CameraController` to finish applying the URL camera (5 frames),
+  // which is when `SliceSignUpdater`'s projection-derived `sliceStepSign` is
+  // stable. Replaces a hardcoded timeout with an actual ready signal so
+  // sign-dependent slice-direction tests aren't flaky on slow CI runners.
+  await page.waitForFunction(() => (window as unknown as { __elvisCameraReady?: boolean }).__elvisCameraReady === true, { timeout: 10000 })
 }
 
 test.describe('Elvis E2E', () => {
