@@ -75,9 +75,10 @@ test.describe('Elvis E2E', () => {
     // Canvas should be visible (first = three.js, second = slice preview)
     await expect(page.locator('canvas').first()).toBeVisible()
 
-    // Element badges: Fe and O
-    await expect(page.getByText('Fe').first()).toBeVisible()
-    await expect(page.getByText('O').first()).toBeVisible()
+    // Element badges (data-legend-item attribute uniquely identifies them, avoiding
+    // collisions with element symbols that appear in Cached Files / Examples drawers).
+    await expect(page.locator('[data-legend-item]').filter({ hasText: 'Fe' })).toBeVisible()
+    await expect(page.locator('[data-legend-item]').filter({ hasText: 'O' })).toBeVisible()
 
     // Default material → no ?m= param in URL (it's the default)
     expect(urlParams(page).get('m')).toBeNull()
