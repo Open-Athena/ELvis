@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Atom, Camera, Eye, Flame, Grid3x3, Layers } from 'lucide-react'
 import { getElement, ELEMENT_INFO } from '../utils/elements.ts'
+import { Tooltip } from './Tooltip.tsx'
 import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
 import { DrawerSection } from './DrawerSection.tsx'
 import styles from './Controls.module.css'
@@ -241,12 +242,11 @@ export function Controls({
             const isActive = active === el
             const isDimmed = active != null && !isActive
             const isPinned = pinned === el
-            const tooltip = info ? `${info.name} (Z=${info.Z})` : el
+            const tooltip = info ? `${info.name} (Z = ${info.Z})` : el
             return (
+              <Tooltip key={el} label={tooltip} placement="top">
               <span
-                key={el}
                 data-legend-item=""
-                title={tooltip}
                 onMouseEnter={() => setHovered(el)}
                 onClick={() => setPinned(p => p === el ? null : el)}
                 style={{
@@ -275,6 +275,7 @@ export function Controls({
                 }} />
                 {el}{count != null && count > 1 && <sub>{count}</sub>}
               </span>
+              </Tooltip>
             )
           })}
         </div>

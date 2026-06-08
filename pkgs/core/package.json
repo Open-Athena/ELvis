@@ -9,6 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.19",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.1.0",
     "lucide-react": "^1.14.0",
