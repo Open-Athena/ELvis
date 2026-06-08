@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Atom, Camera, Eye, Flame, Grid3x3, Layers } from 'lucide-react'
-import { getElement } from '../utils/elements.ts'
+import { getElement, ELEMENT_INFO } from '../utils/elements.ts'
 import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
 import { DrawerSection } from './DrawerSection.tsx'
 import styles from './Controls.module.css'
@@ -237,13 +237,16 @@ export function Controls({
             const { color } = getElement(el)
             const css = `#${color.toString(16).padStart(6, '0')}`
             const count = counts?.[i]
+            const info = ELEMENT_INFO[el]
             const isActive = active === el
             const isDimmed = active != null && !isActive
             const isPinned = pinned === el
+            const tooltip = info ? `${info.name} (Z=${info.Z})` : el
             return (
               <span
                 key={el}
                 data-legend-item=""
+                title={tooltip}
                 onMouseEnter={() => setHovered(el)}
                 onClick={() => setPinned(p => p === el ? null : el)}
                 style={{
