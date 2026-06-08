@@ -1113,6 +1113,14 @@ export default function App() {
       setRotMode(next)
     },
   })
+  useAction('nav:toggle-quat-rot', {
+    label: 'Toggle quaternion rotation',
+    description: 'Toggle between orbit (default) and free (quaternion) rotation mode',
+    keywords: ['rotate', 'rotation', 'quaternion', 'free', 'pole', 'q'],
+    group: 'Camera',
+    defaultBindings: ['q'],
+    handler: () => setRotMode(rotMode === 'free' ? 'orbit' : 'free'),
+  })
 
   // Auto-restore on mount: ?m= param (OPFS cache → fetch) or last active OPFS volume
   const initialMaterialId = useRef(materialId)

@@ -9,6 +9,7 @@ import type { VolumeData } from '../types.ts'
 import { fracToCart } from '../utils/lattice.ts'
 import { getElement } from '../utils/elements.ts'
 import type { TileInfo } from '../utils/tiling.ts'
+import { buildCDFLUT, identityLUT } from '../utils/density-quantile.ts'
 
 interface HeatmapRendererProps {
   volume: VolumeData
@@ -35,6 +36,10 @@ interface HeatmapRendererProps {
    *  density linear mapping (legacy behavior). Unsigned mode only; signed
    *  (diff) keeps its diverging mapping. */
   equalize?: boolean
+  /** Sorted samples of raw density values (pre-computed in `DensityViewer`
+   *  via `computeSortedSamples`). Shared with `HeatmapLegend` so tick labels
+   *  match the equalized colormap exactly. */
+  sortedSamples?: Float32Array
   /**
    * When true (default), terminate rays that enter an atom sphere. Prevents glow from
    * accumulating past atoms (visible artifact when atoms are opaque). Set false to render
@@ -263,36 +268,9 @@ void main() {
 }
 `
 
-/** Build a 256-entry CDF LUT from the raw density samples. Maps normalized val
- *  in [0, 1] to its quantile position. Sample-based for perf (deterministic
- *  stride; LUT depends only on `data` and the [dataMin, dataMax] window). */
-function computeCDFLUT(data: Float32Array, dataMin: number, dataMax: number, lutSize = 256, sampleTarget = 16384): Float32Array {
-  const range = dataMax - dataMin || 1
-  const stride = Math.max(1, Math.floor(data.length / sampleTarget))
-  const nSamples = Math.floor(data.length / stride)
-  const samples = new Float32Array(nSamples)
-  for (let i = 0, j = 0; i < nSamples; i++, j += stride) {
-    samples[i] = (data[j] - dataMin) / range
-  }
-  samples.sort()
-  const lut = new Float32Array(lutSize)
-  for (let i = 0; i < lutSize; i++) {
-    const v = i / (lutSize - 1)
-    // Binary search for first sample >= v.
-    let lo = 0, hi = nSamples
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1
-      if (samples[mid] < v) lo = mid + 1
-      else hi = mid
-    }
-    lut[i] = lo / Math.max(nSamples - 1, 1)
-  }
-  return lut
-}
-
 export function HeatmapRenderer({
   volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
-  clipAtoms = true, equalize = true,
+  clipAtoms = true, equalize = true, sortedSamples,
   tiles: _tiles, tilePadding = 0, tileFade = 1,
 }: HeatmapRendererProps) {
   const { camera } = useThree()
@@ -316,19 +294,17 @@ export function HeatmapRenderer({
     return tex
   }, [data, dims, dataMin, dataMax])
 
-  // CDF LUT for histogram equalization. Computed once per dataset; safe to
-  // skip if `equalize=false` (uniform-identity LUT is cheap to keep around).
+  // CDF LUT for histogram equalization. Uses externally-computed sortedSamples
+  // (shared with HeatmapLegend) so tick labels and shader colors stay in sync.
   const lutTexture = useMemo(() => {
-    const lut = equalize ? computeCDFLUT(data, dataMin, dataMax) : (() => {
-      const id = new Float32Array(256)
-      for (let i = 0; i < 256; i++) id[i] = i / 255
-      return id
-    })()
+    const lut = (equalize && sortedSamples)
+      ? buildCDFLUT(sortedSamples, dataMin, dataMax)
+      : identityLUT()
     const tex = new DataTexture(lut, lut.length, 1, RedFormat, FloatType, UVMapping,
       ClampToEdgeWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter)
     tex.needsUpdate = true
     return tex
-  }, [data, dataMin, dataMax, equalize])
+  }, [sortedSamples, dataMin, dataMax, equalize])
 
   const cartToFrac = useMemo(() => {
     const L = volume.lattice

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { turbo, diverging } from '../utils/colormap.ts'
+import { densityAtQuantile } from '../utils/density-quantile.ts'
 
 interface HeatmapLegendProps {
   dataMin: number
@@ -9,6 +10,11 @@ interface HeatmapLegendProps {
   gamma: number
   lowCutoff: number
   units?: string
+  /** When true (and `sortedSamples` provided), tick labels show density at the
+   *  quantile position of the colorbar (so each color band spans equal voxel
+   *  count). When false, ticks are linear interpolation of `[dataMin, dataMax]`. */
+  equalize?: boolean
+  sortedSamples?: Float32Array
 }
 
 const BAR_WIDTH = 22
@@ -25,7 +31,7 @@ function formatValue(v: number): string {
   return v.toFixed(1)
 }
 
-export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, units }: HeatmapLegendProps) {
+export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, units, equalize, sortedSamples }: HeatmapLegendProps) {
   const gradient = useMemo(() => {
     // CSS linear-gradient: bottom (0%, low) → top (100%, high). Alpha follows the
     // shader's `pow(v, gamma)` curve so the legend visually matches the rendering.
@@ -44,12 +50,19 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
 
   const ticks = useMemo(() => {
     const out: { fraction: number; value: number }[] = []
+    // In equalize mode, each visual fraction `f` corresponds to "voxel at
+    // quantile f" — so tick labels are the raw density at that quantile.
+    // In linear mode, labels are the linear interpolation across [min, max].
+    const useQuantile = equalize && sortedSamples && !signed
     for (let i = 0; i < N_TICKS; i++) {
       const fraction = i / (N_TICKS - 1)
-      out.push({ fraction, value: dataMin + fraction * (dataMax - dataMin) })
+      const value = useQuantile
+        ? densityAtQuantile(sortedSamples, fraction)
+        : dataMin + fraction * (dataMax - dataMin)
+      out.push({ fraction, value })
     }
     return out
-  }, [dataMin, dataMax])
+  }, [dataMin, dataMax, equalize, sortedSamples, signed])
 
   return (
     <div
