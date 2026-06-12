@@ -141,17 +141,13 @@ float chebyshevDist(vec3 p) {
              max(max(0.0, -p.z), max(p.z - 1.0, 0.0))));
 }
 
-// Diverging colormap for signed diffs: green (added) for val > 0.5, red (removed)
-// for val < 0.5. Critically, color goes to (0,0,0) at val=0.5 so ray-march accumulation
-// near zero stays invisible regardless of alpha — fixes the issue where turbo's
-// yellow-green midpoint leaked visible color into low-magnitude regions.
-vec3 diverging(float val) {
-  float u = (val - 0.5) * 2.0;        // [-1, 1]
-  float mag = pow(abs(u), 0.65);      // emphasize mid-range, still 0 at u=0
-  vec3 pos = vec3(0.10, 0.95, 0.30);  // green for "DFT added density"
-  vec3 neg = vec3(1.00, 0.20, 0.10);  // red for "DFT removed density"
-  return mag * (u >= 0.0 ? pos : neg);
-}
+// Diverging color anchors for signed diffs. Green (added) is "DFT > input";
+// red (removed) is "DFT < input". Used by the additive signed code path which
+// accumulates positive and negative integrals along each ray separately so
+// concentrated peaks (bonds, green) cannot occlude diffuse low-magnitude signal
+// (anti-bond, red) the way front-to-back over-blending did.
+const vec3 SIGNED_POS = vec3(0.10, 0.95, 0.30);
+const vec3 SIGNED_NEG = vec3(1.00, 0.20, 0.10);
 
 vec3 turbo(float x) {
   const vec4 kRedVec4 = vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
@@ -195,11 +191,16 @@ void main() {
   float dtRef = 1.0 / 256.0;
   float t = tHit.x;
 
+  // Unsigned uses over-blend (front-to-back compositing); signed uses additive
+  // per-sign integrals, then converts to color at the end. Both update inside
+  // the same loop so the ray-march, atom-clip, and padding-fade logic stay shared.
   vec4 acc = vec4(0.0);
+  float posInt = 0.0;
+  float negInt = 0.0;
 
   for (int i = 0; i < 512; i++) {
     if (t > tHit.y) break;
-    if (acc.a > 0.99) break;
+    if (uSigned == 0 && acc.a > 0.99) break;
 
     vec3 fracP = fracOrigin + fracDir * t;
 
@@ -241,24 +242,32 @@ void main() {
     if (uPadding > 0.0 && uFade > 0.0) {
       float d = chebyshevDist(fracP);
       if (d > 0.0) {
-        float t = clamp(d / uPadding, 0.0, 1.0);
-        float linearFade = pow(1.0 - t, uFade);
-        float shellCutoff = 1.0 - smoothstep(0.7, 1.0, t);
+        float tFade = clamp(d / uPadding, 0.0, 1.0);
+        float linearFade = pow(1.0 - tFade, uFade);
+        float shellCutoff = 1.0 - smoothstep(0.7, 1.0, tFade);
         float effFade = linearFade * shellCutoff;
         float neutralVal = uSigned > 0 ? 0.5 : 0.0;
         val = mix(neutralVal, val, effFade);
       }
     }
 
-    // In signed (diverging) mode the texture stores values centered at 0.5
-    // (val=0.5 == raw 0). Color always uses val so 0 lands at turbo's mid-point;
-    // alpha gates on abs(val - 0.5) * 2 so the near-zero band is transparent.
-    float effVal = uSigned > 0 ? clamp(abs(val - 0.5) * 2.0, 0.0, 1.0) : val;
-
-    if (effVal > uLowCutoff) {
-      vec3 col = uSigned > 0 ? diverging(val) : turbo(val);
-      // Renormalize after subtracting low cutoff so effVal=1 still maps to alpha=1.
-      float v = clamp((effVal - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4), 0.0, 1.0);
+    if (uSigned > 0) {
+      // Signed (diff) mode: split each sample into a positive or negative
+      // magnitude and add it to a per-sign integral along the ray. No
+      // front-to-back occlusion between the two signs, so a concentrated
+      // green peak cannot block diffuse red behind it (and vice versa).
+      float sv = val - 0.5;                       // [-0.5, 0.5]
+      float mag = clamp(abs(sv) * 2.0, 0.0, 1.0); // [0, 1]
+      if (mag > uLowCutoff) {
+        float m = (mag - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4);
+        float w = pow(m, uGamma) * (dt / dtRef);
+        if (sv > 0.0) posInt += w;
+        else          negInt += w;
+      }
+    } else if (val > uLowCutoff) {
+      // Unsigned (density) mode: turbo + over-blend.
+      vec3 col = turbo(val);
+      float v = clamp((val - uLowCutoff) / max(1.0 - uLowCutoff, 1e-4), 0.0, 1.0);
       float baseA = pow(v, uGamma) * uOpacity;
       float a = 1.0 - pow(max(1.0 - baseA, 0.0), dt / dtRef);
 
@@ -269,8 +278,19 @@ void main() {
     t += dt;
   }
 
-  if (acc.a < 0.001) discard;
-  gl_FragColor = acc;
+  if (uSigned > 0) {
+    // Soft-saturate each integral so a long red ray and a short bright green
+    // ray can both peak at full intensity without nuking the other.
+    float p = 1.0 - exp(-posInt * uOpacity);
+    float n = 1.0 - exp(-negInt * uOpacity);
+    vec3 col = p * SIGNED_POS + n * SIGNED_NEG;
+    float a = max(p, n);
+    if (a < 0.001) discard;
+    gl_FragColor = vec4(col, a);
+  } else {
+    if (acc.a < 0.001) discard;
+    gl_FragColor = acc;
+  }
 }
 `
 
