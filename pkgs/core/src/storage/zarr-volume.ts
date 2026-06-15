@@ -41,16 +41,22 @@ function fetchWithS3MissingKeyShim(request: Request): Promise<Response> {
   return fetch(request).then(r => r.status === 403 ? new Response(null, { status: 404 }) : r)
 }
 
-/** Open a multi-resolution Zarr store and read its metadata + per-level shapes. */
+/** Open a multi-resolution Zarr store and read its metadata + per-level shapes.
+ *
+ *  Uses zarrita's autodetect opener -- tries v3 first, falls back to v2 on
+ *  metadata mismatch. Tomat-produced zarrs are v3 multi-res pyramids; older
+ *  ELvis-written zarrs are v2. zarrita biases subsequent opens on the same
+ *  store toward the most recently successful version, so the per-load cost
+ *  of autodetect amortizes to ~one extra metadata probe on the first open.
+ */
 export async function openZarrVolume(url: string): Promise<OpenedZarrVolume> {
   const store = new zarr.FetchStore(url, { fetch: fetchWithS3MissingKeyShim })
-  // Use v2-specific opener to skip the v3 `zarr.json` probe.
-  const root = await zarr.open.v2(store, { kind: 'group' })
+  const root = await zarr.open(store, { kind: 'group' })
   const meta = root.attrs as unknown as ZarrVolumeMetadata
   const levels = meta.multiscales[0].datasets.length
   const levelShapes: [number, number, number][] = []
   for (let i = 0; i < levels; i++) {
-    const arr = await zarr.open.v2(root.resolve(String(i)), { kind: 'array' })
+    const arr = await zarr.open(root.resolve(String(i)), { kind: 'array' })
     levelShapes.push(arr.shape as [number, number, number])
   }
   return { url, meta, levels, levelShapes }
@@ -62,8 +68,8 @@ export async function readZarrLevel(
   level: number,
 ): Promise<{ data: Float32Array; dims: [number, number, number] }> {
   const store = new zarr.FetchStore(opened.url, { fetch: fetchWithS3MissingKeyShim })
-  const root = await zarr.open.v2(store, { kind: 'group' })
-  const arr = await zarr.open.v2(root.resolve(String(level)), { kind: 'array' })
+  const root = await zarr.open(store, { kind: 'group' })
+  const arr = await zarr.open(root.resolve(String(level)), { kind: 'array' })
   const result = await zarr.get(arr)
   // zarrita returns C-ordered raw bytes; pymatgen->Zarr writes in C-order too.
   // VASP/marching-cubes expects F-order (flat[i + j*Nx + k*Nx*Ny] = data[i,j,k]).
