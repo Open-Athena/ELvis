@@ -66,6 +66,7 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
 
   return (
     <div
+      data-testid="heatmap-legend"
       style={{
         position: 'absolute',
         top: 16,

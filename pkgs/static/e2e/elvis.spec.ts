@@ -51,14 +51,11 @@ async function waitForLoad(page: Page) {
   // The filename appears in the (default-closed) Cached Files drawer as well as
   // the always-visible Controls panel title; `.last()` picks the visible one.
   await expect(page.getByText('mp-1000020.json.gz').last()).toBeVisible({ timeout: 15000 })
-  // CameraController sets `__elvisCameraReady` only after the renderer is
-  // mounted (which requires parsed volume data). Robust to UI changes that
-  // move/hide individual controls — previously this probed `Iso: \d+` inside
-  // the Surface section, which now hides in heatmap (default) mode.
-  await page.waitForFunction(
-    () => (window as unknown as { __elvisCameraReady?: boolean }).__elvisCameraReady === true,
-    { timeout: 10000 },
-  )
+  // The heatmap legend (top-right) only renders after density quantiles are
+  // computed — a later signal than CameraController mounting. Probes a
+  // `data-testid` rather than text inside the Surface section (which can hide
+  // depending on mode).
+  await expect(page.getByTestId('heatmap-legend')).toBeVisible({ timeout: 10000 })
 }
 
 /** Enter slice mode and wait for the keymap to be active. */
