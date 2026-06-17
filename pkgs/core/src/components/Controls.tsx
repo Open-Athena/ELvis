@@ -77,6 +77,9 @@ interface ControlsProps {
   highlightElement?: string | null
   /** Called when the user hovers/unhovers an element pill in the legend */
   onHighlightElementChange?: (el: string | null) => void
+  /** Whether the current view is a signed diff (`s=d`). Hides the Surface
+   *  section since Iso/Opacity don't apply to the heatmap-only diff render. */
+  isDiff?: boolean
   /** Heatmap-mode params (only meaningful when heatmap mode is on). */
   useHeatmap?: boolean
   onUseHeatmapChange?: (v: boolean) => void
@@ -165,6 +168,7 @@ export function Controls({
   onTileFadeChange,
   highlightElement: _highlightElement,
   onHighlightElementChange,
+  isDiff,
   useHeatmap,
   onUseHeatmapChange,
   heatmapOpacity = 0.4,
@@ -281,6 +285,7 @@ export function Controls({
         </div>
       )}
 
+      {!useHeatmap && !isDiff && (
       <DrawerSection id="surface" title="Surface" icon={<Atom size={ICON_SIZE} />} accent={ACCENT.surface} defaultOpen>
           <div className={styles.controlLabel}>
             <div className={styles.sliderHeader}>
@@ -347,6 +352,7 @@ export function Controls({
             />
           </div>
         </DrawerSection>
+      )}
 
       {onUseHeatmapChange && (
         <DrawerSection id="heatmap" title="Heatmap" icon={<Flame size={ICON_SIZE} />} accent={ACCENT.heatmap} defaultOpen={false}>

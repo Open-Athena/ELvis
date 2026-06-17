@@ -1792,6 +1792,7 @@ export default function App() {
         {primaryFile && (
           <ErrorBoundary label="Controls" resetKey={`${materialId}:${effectiveIsoLevel}`}>
             <Controls
+              isDiff={srcRole === 'diff'}
               isoLevel={effectiveIsoLevel}
               defaultIsoLevel={defaultIsoLevel}
               maxDensity={maxDensity}

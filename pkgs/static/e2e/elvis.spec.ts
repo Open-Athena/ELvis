@@ -51,10 +51,14 @@ async function waitForLoad(page: Page) {
   // The filename appears in the (default-closed) Cached Files drawer as well as
   // the always-visible Controls panel title; `.last()` picks the visible one.
   await expect(page.getByText('mp-1000020.json.gz').last()).toBeVisible({ timeout: 15000 })
-  // Iso info shows after grid data is parsed and density quantiles computed.
-  // Replaces the previous `Slice: X / 31` probe, which no longer renders since
-  // slice display defaults off (a40b788).
-  await expect(page.getByText(/Iso: \d+/)).toBeVisible({ timeout: 10000 })
+  // CameraController sets `__elvisCameraReady` only after the renderer is
+  // mounted (which requires parsed volume data). Robust to UI changes that
+  // move/hide individual controls — previously this probed `Iso: \d+` inside
+  // the Surface section, which now hides in heatmap (default) mode.
+  await page.waitForFunction(
+    () => (window as unknown as { __elvisCameraReady?: boolean }).__elvisCameraReady === true,
+    { timeout: 10000 },
+  )
 }
 
 /** Enter slice mode and wait for the keymap to be active. */
