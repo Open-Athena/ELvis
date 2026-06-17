@@ -5,6 +5,12 @@
       "github": "runsascoded/use-kbd",
       "npm": "use-kbd",
       "distBranch": "dist"
+    },
+    "use-prms": {
+      "localPath": "../../js/use-prms",
+      "github": "runsascoded/use-prms",
+      "npm": "use-prms",
+      "distBranch": "dist"
     }
   }
 }

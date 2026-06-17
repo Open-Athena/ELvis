@@ -14,6 +14,7 @@
     ]
   },
   "dependencies": {
-    "use-kbd": "https://github.com/runsascoded/use-kbd#e8de7954c2d39b639dc1b99203659b91fd8fd269"
+    "use-kbd": "https://github.com/runsascoded/use-kbd#e8de7954c2d39b639dc1b99203659b91fd8fd269",
+    "use-prms": "https://github.com/runsascoded/use-prms#2cc362372ae5cfb056b16df127870ae1db615fb8"
   }
 }

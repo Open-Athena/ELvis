@@ -20,7 +20,10 @@ import {
   sampleRamp,
   densityToQuantile,
   DEFAULT_RAMP,
-  fetchZarrVolume,
+  openZarrVolume,
+  readZarrLevel,
+  zarrToVolumeData,
+  pickProgressiveLevels,
   parseS3Pattern,
   DrawerSection,
   DRAWER_EVT,
@@ -29,7 +32,7 @@ import { Database, Link2, Settings2, Sparkles } from 'lucide-react'
 import { ShortcutsModal, Omnibar, SequenceModal, LookupModal, SpeedDial, ModeIndicator, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
 import type { SpeedDialAction } from 'use-kbd'
 import 'use-kbd/styles.css'
-import { useUrlState, floatParam, optFloatParam, boolParam, intParam, optIntParam, stringParam } from 'use-prms'
+import { useUrlState, useUrlAlias, flagPackParam, floatParam, optFloatParam, boolParam, intParam, optIntParam, stringParam } from 'use-prms'
 import type { Param } from 'use-prms'
 import { OpfsVolumeStore, isOPFSSupported } from './storage/OpfsVolumeStore.ts'
 import { loadCredentials, saveCredentials } from './utils/aws-credentials.ts'
@@ -96,17 +99,21 @@ function computeDensityQuantiles(data: Float32Array, nQuantiles = 201, sampleCap
   return qs
 }
 
-// Bool param defaulting to true (present in URL = disabled)
-const boolTrueParam: Param<boolean> = {
-  encode: (v) => v ? undefined : '',
-  decode: (e) => e === undefined,
-}
-
 // Optional tri-state bool: undefined (absent), true ('1'), false ('0').
 // Lets callers compute a context-dependent default instead of hardwiring one.
 const optBoolParam: Param<boolean | undefined> = {
   encode: (v) => v === undefined ? undefined : v ? '1' : '0',
   decode: (e) => e === undefined ? undefined : e !== '0',
+}
+
+// `s` enum: maps URL value `l|i|d` ↔ internal `'label'|'input'|'diff'`.
+// Keeps the rest of the code readable (`srcRole === 'diff'`) while the URL stays terse.
+type SrcRole = 'input' | 'label' | 'diff'
+const SRC_ENCODE: Record<SrcRole, string | undefined> = { label: undefined, input: 'i', diff: 'd' }
+const SRC_DECODE: Record<string, SrcRole> = { l: 'label', i: 'input', d: 'diff' }
+const srcRoleParam: Param<SrcRole> = {
+  encode: (v) => SRC_ENCODE[v],
+  decode: (e) => (e === undefined ? 'label' : (SRC_DECODE[e] ?? 'label')),
 }
 
 // Camera state: theta°, phi°, zoom, roll° (roll optional, defaults to 0)
@@ -215,7 +222,25 @@ export default function App() {
   const [opacity, setOpacity] = useUrlState('op', floatParam({ default: 0.6, encoding: 'string', decimals: 2 }), { debounce: 300 })
   const [useGpuVolume, setUseGpuVolume] = useUrlState('gpu', boolParam)
   const [useGlbPreview, setUseGlbPreview] = useUrlState('glb', boolParam)
-  const [useHeatmap, setUseHeatmap] = useUrlState('heat', boolTrueParam)
+  // Default-on toggles packed under one key: `?_=HA` = heatmap off + atoms hidden, etc.
+  // Each letter present = the corresponding flag is *non-default* (matches the prior
+  // boolTrueParam semantics, just collapsed into one URL slot).
+  const [flags, setFlags] = useUrlState('_', flagPackParam({
+    H: true,  // heatmap (default on)
+    A: true,  // atoms visible
+    C: true,  // abc cell visible
+    L: true,  // atom labels visible
+    E: true,  // histogram-equalize density
+  }))
+  const useHeatmap = flags.H
+  const showAtoms = flags.A
+  const showAbcCell = flags.C
+  const showAtomLabels = flags.L
+  const heatmapEqualize = flags.E
+  const setUseHeatmap = useCallback((v: boolean) => setFlags({ ...flags, H: v }), [flags, setFlags])
+  const setShowAtoms = useCallback((v: boolean) => setFlags({ ...flags, A: v }), [flags, setFlags])
+  const setShowAbcCell = useCallback((v: boolean) => setFlags({ ...flags, C: v }), [flags, setFlags])
+  const setShowAtomLabels = useCallback((v: boolean) => setFlags({ ...flags, L: v }), [flags, setFlags])
   const [heatmapGamma, setHeatmapGamma] = useUrlState('hg', floatParam({ default: 2.5, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapLowCutoff, setHeatmapLowCutoff] = useUrlState('hl', floatParam({ default: 0, encoding: 'string', decimals: 2 }), { debounce: 100 })
   const [heatmapStepCount, setHeatmapStepCount] = useUrlState('hs', intParam(256), { debounce: 100 })
@@ -223,28 +248,27 @@ export default function App() {
   // have different defaults — the heatmap is fog-like and benefits from being more
   // translucent than a hard iso-surface.
   const [heatmapOpacity, setHeatmapOpacity] = useUrlState('ho', floatParam({ default: 0.4, encoding: 'string', decimals: 2 }), { debounce: 100 })
-  // Histogram-equalize density distribution before colormapping. Default on
-  // (huge win for high-dynamic-range materials like oxides). `?he=` forces off.
-  const [heatmapEqualize] = useUrlState('he', boolTrueParam)
-  const [useZarr, setUseZarr] = useUrlState('zarr', boolTrueParam)
+  // Zarr loader: tri-state via `optBoolParam` so `?Z=1` force-on / `?Z=0` force-off /
+  // absent → context default (true). Avoids the `boolTrueParam` gotcha where `?Z=1`
+  // would read as "disable".
+  const [useZarrUrl, setUseZarrUrl] = useUrlState('Z', optBoolParam)
+  const useZarr = useZarrUrl ?? true
+  const setUseZarr = useCallback((v: boolean) => setUseZarrUrl(v), [setUseZarrUrl])
   const [colorByDensity, setColorByDensity] = useUrlState('cd', boolParam)
-  const [showAtoms, setShowAtoms] = useUrlState('ha', boolTrueParam)
-  const [showAbcCell, setShowAbcCell] = useUrlState('hc', boolTrueParam)
   const [showXyzBox, setShowXyzBox] = useUrlState('xb', boolParam)
-  const [showAtomLabels, setShowAtomLabels] = useUrlState('al', boolTrueParam)
   const [dashedLines, setDashedLines] = useUrlState('dl', boolParam)
   // Tri-state: ?sl=1 forces on, ?sl=0 forces off, absent → context-dependent default
   // (off in diff view since the slice fights the volumetric heatmap; on otherwise as a
   // free 2D context map). Computed below once srcRole is in scope.
   const [showSliceUrl, setShowSlice] = useUrlState('sl', optBoolParam)
-  const [sliceAxis, setSliceAxis] = useUrlState('sa', intParam(2)) as [0 | 1 | 2, (v: 0 | 1 | 2) => void]
+  const [sliceAxis, setSliceAxis] = useUrlState('sa', intParam(2)) as unknown as [0 | 1 | 2, (v: 0 | 1 | 2) => void]
   const [sliceIndex, setSliceIndex] = useUrlState('si', optIntParam, { debounce: 300 })
   const [orbitDeg, setOrbitDeg] = useUrlState('od', intParam(30))
   const [zoomPct, setZoomPct] = useUrlState('zd', intParam(0))
   const [panStep, setPanStep] = useUrlState('pd', floatParam({ default: 0, encoding: 'string', decimals: 1 }))
   const [rollDeg, setRollDeg] = useUrlState('rd', intParam(0))
   const [animDuration, setAnimDuration] = useUrlState('a', floatParam({ default: 0.5, encoding: 'string', decimals: 1 }))
-  const [rotMode, setRotMode] = useUrlState('rot', stringParam('free')) as [
+  const [rotMode, setRotMode] = useUrlState('rot', stringParam('free')) as unknown as [
     'orbit' | 'trackball' | 'free',
     (v: 'orbit' | 'trackball' | 'free') => void,
   ]
@@ -256,13 +280,32 @@ export default function App() {
   const [tileFade, setTileFade] = useUrlState('nf', floatParam({ default: 1, encoding: 'string', decimals: 1 }), { debounce: 300 })
   const [cam, setCam] = useUrlState('c', camParam)
   const [camTarget, setCamTarget] = useUrlState('ct', camTargetParam, { debounce: 500 })
-  const [materialId, setMaterialId] = useUrlState('m', stringParam(DEFAULT_MP_ID), { push: true })
+  // `m` is the canonical material id (`mp-2375705`); `mp` is an alias that lets users type
+  // the bare number (`?mp=2375705` → `?m=mp-2375705` after canonicalize-on-mount).
+  // Note: `useUrlAlias` writes via `replaceState`; the previous `{ push: true }` semantics
+  // (back-button stops on material change) are lost until use-prms grows a `push` option.
+  const mIdParam: Param<string | undefined> = { encode: v => v, decode: e => e }
+  const mpIdParam: Param<string | undefined> = {
+    encode: () => undefined,                                    // alias is read-only
+    decode: e => (e === undefined || e === '' ? undefined : `mp-${e}`),
+  }
+  const [materialIdRaw, setMaterialId] = useUrlAlias<string>({
+    keys: ['m', 'mp'] as const,
+    params: { m: mIdParam, mp: mpIdParam },
+    merge: (vals) => {
+      const m = vals.m, mp = vals.mp
+      if (m !== undefined && m !== '' && mp !== undefined && m !== mp) {
+        return new Error(`m=${m} conflicts with mp=${mp.slice(3)}`)
+      }
+      return m ?? mp
+    },
+  })
+  const materialId = materialIdRaw ?? DEFAULT_MP_ID
   // Top-level view switcher. Currently only the MPDB browse page swaps in;
   // empty/undefined renders the normal viewer.
   const [view, setView] = useUrlState('view', stringParam(''), { push: true })
-  type SrcRole = 'input' | 'label' | 'diff'
-  const [srcRole, setSrcRole] = useUrlState('src', stringParam('label')) as [SrcRole, (v: SrcRole) => void]
-  // Diff mode operand overrides (only meaningful when src=diff). Empty = auto-resolve from `m=`.
+  const [srcRole, setSrcRole] = useUrlState('s', srcRoleParam)
+  // Diff mode operand overrides (only meaningful when s=d). Empty = auto-resolve from `m=`.
   const [v0Url, setV0Url] = useUrlState('v0', stringParam(''))
   const [v1Url, setV1Url] = useUrlState('v1', stringParam(''))
   // Condensed pattern (`?s3=...{a,b}...` for brace expand, `*` or trailing-prefix for LIST).
@@ -1168,7 +1211,7 @@ export default function App() {
       return null
     },
     staleTime: Infinity,
-    // Skip when src=diff: the diff effect resolves+loads operands directly via Zarr,
+    // Skip when s=d: the diff effect resolves+loads operands directly via Zarr,
     // and a parallel single-file fetch here would race and overwrite that result.
     enabled: files.length === 0 && srcRole !== 'diff',
   })
@@ -1239,14 +1282,17 @@ export default function App() {
     setFetchStatus(null)
   }, [setCurrentVolumeId])
 
+  const loadGenRef = useRef(0)
+
   const loadDiff = useCallback(async (
     record: MaterialRecord | null,
     v0Override?: string,
     v1Override?: string,
   ) => {
+    const gen = ++loadGenRef.current
     setUrlLoading(true)
     setFiles([])
-    setFetchStatus('Loading v0 + v1 for diff...')
+    setFetchStatus('Opening v0 + v1 for diff...')
     try {
       // Resolution: v0/v1 overrides take precedence; otherwise auto-derive from record.
       // Convention: v0 = input (SAD, "before"), v1 = label (DFT, "after").
@@ -1256,34 +1302,57 @@ export default function App() {
         setFetchStatus('Diff requires both v0 and v1 Zarr URLs')
         return
       }
-      const [a, b] = await Promise.all([
-        fetchZarrVolume(toFetchUrl(v0Resolved)),
-        fetchZarrVolume(toFetchUrl(v1Resolved)),
+      const [opened0, opened1] = await Promise.all([
+        openZarrVolume(toFetchUrl(v0Resolved)),
+        openZarrVolume(toFetchUrl(v1Resolved)),
       ])
-      const dA = a.grid.dims, dB = b.grid.dims
-      if (dA[0] !== dB[0] || dA[1] !== dB[1] || dA[2] !== dB[2]) {
-        setFetchStatus(`Diff dim mismatch: v0 ${dA.join('×')} vs v1 ${dB.join('×')}`)
-        return
-      }
-      const n = a.grid.data.length
-      const data = new Float32Array(n)
+      if (gen !== loadGenRef.current) return
+      const { coarseLevel, fineLevel } = pickProgressiveLevels(opened0)
+      const id = record?.id ?? 'diff'
+
       // Signed diff using github-style convention: diff = v1 − v0 (after − before).
       // Positive ⟹ DFT *added* density (cool/green, like a "+ added" hunk).
       // Negative ⟹ DFT *removed* density (warm/red, like a "− removed" hunk).
-      for (let i = 0; i < n; i++) data[i] = b.grid.data[i] - a.grid.data[i]
-      // Structure (atoms, lattice) is taken from v0.
-      const id = record?.id ?? 'diff'
-      const diff: VolumeData = {
-        ...a,
-        title: `${id}/diff`,
-        grid: { dims: a.grid.dims, data },
+      const buildDiff = (a: VolumeData, b: VolumeData, level: number): VolumeData | string => {
+        const dA = a.grid.dims, dB = b.grid.dims
+        if (dA[0] !== dB[0] || dA[1] !== dB[1] || dA[2] !== dB[2]) {
+          return `Diff dim mismatch at L${level}: v0 ${dA.join('×')} vs v1 ${dB.join('×')}`
+        }
+        const n = a.grid.data.length
+        const data = new Float32Array(n)
+        for (let i = 0; i < n; i++) data[i] = b.grid.data[i] - a.grid.data[i]
+        // Structure (atoms, lattice) is taken from v0.
+        return { ...a, title: `${id}/diff`, grid: { dims: a.grid.dims, data } }
       }
-      handleLoad(diff, `${id}-diff`)
+
+      setFetchStatus(`Loading L${coarseLevel}...`)
+      const [c0, c1] = await Promise.all([
+        readZarrLevel(opened0, coarseLevel),
+        readZarrLevel(opened1, coarseLevel),
+      ])
+      if (gen !== loadGenRef.current) return
+      const coarseDiff = buildDiff(zarrToVolumeData(opened0, c0), zarrToVolumeData(opened1, c1), coarseLevel)
+      if (typeof coarseDiff === 'string') { setFetchStatus(coarseDiff); return }
+      handleLoad(coarseDiff, `${id}-diff`)
+
+      if (fineLevel === coarseLevel) {
+        setFetchStatus(null)
+        return
+      }
+      setFetchStatus(`Refining to L${fineLevel}...`)
+      const [f0, f1] = await Promise.all([
+        readZarrLevel(opened0, fineLevel),
+        readZarrLevel(opened1, fineLevel),
+      ])
+      if (gen !== loadGenRef.current) return
+      const fineDiff = buildDiff(zarrToVolumeData(opened0, f0), zarrToVolumeData(opened1, f1), fineLevel)
+      if (typeof fineDiff === 'string') { setFetchStatus(fineDiff); return }
+      handleLoad(fineDiff, `${id}-diff`)
       setFetchStatus(null)
     } catch (e) {
-      setFetchStatus(`Diff failed: ${e instanceof Error ? e.message : String(e)}`)
+      if (gen === loadGenRef.current) setFetchStatus(`Diff failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setUrlLoading(false)
+      if (gen === loadGenRef.current) setUrlLoading(false)
     }
   }, [handleLoad])
 
@@ -1292,7 +1361,7 @@ export default function App() {
   const loadDiffRef = useRef(loadDiff)
   loadDiffRef.current = loadDiff
 
-  // Drive `?src=diff` from URL: when srcRole becomes 'diff' (initial mount or via hotkey),
+  // Drive `?s=d` from URL: when srcRole becomes 'diff' (initial mount or via hotkey),
   // or when v0/v1/record/pattern change while in diff mode, (re)fetch and compute the diff volume.
   useEffect(() => {
     if (srcRole !== 'diff') return
@@ -1326,10 +1395,25 @@ export default function App() {
 
       if (isZarr) {
         const httpsUrl = toFetchUrl(url)
-        setFetchStatus('Loading Zarr...')
-        const data = await fetchZarrVolume(httpsUrl)
-        const filename = data.title
-        handleLoad(data, filename)
+        const gen = ++loadGenRef.current
+        setFetchStatus('Opening Zarr...')
+        const opened = await openZarrVolume(httpsUrl)
+        if (gen !== loadGenRef.current) return
+        const { coarseLevel, fineLevel } = pickProgressiveLevels(opened)
+
+        setFetchStatus(`Loading L${coarseLevel}...`)
+        const c = await readZarrLevel(opened, coarseLevel)
+        if (gen !== loadGenRef.current) return
+        const coarseData = zarrToVolumeData(opened, c)
+        handleLoad(coarseData, coarseData.title)
+
+        if (fineLevel !== coarseLevel) {
+          setFetchStatus(`Refining to L${fineLevel}...`)
+          const f = await readZarrLevel(opened, fineLevel)
+          if (gen !== loadGenRef.current) return
+          const fineData = zarrToVolumeData(opened, f)
+          handleLoad(fineData, fineData.title)
+        }
         setFetchStatus(null)
         return
       }

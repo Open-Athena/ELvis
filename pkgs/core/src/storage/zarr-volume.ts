@@ -42,21 +42,15 @@ function fetchWithS3MissingKeyShim(request: Request): Promise<Response> {
 }
 
 /** Open a multi-resolution Zarr store and read its metadata + per-level shapes.
- *
- *  Uses zarrita's autodetect opener -- tries v3 first, falls back to v2 on
- *  metadata mismatch. Tomat-produced zarrs are v3 multi-res pyramids; older
- *  ELvis-written zarrs are v2. zarrita biases subsequent opens on the same
- *  store toward the most recently successful version, so the per-load cost
- *  of autodetect amortizes to ~one extra metadata probe on the first open.
- */
+ *  v3-only: tomat-produced GT + pred zarrs and the electrai-205 R2 mirror are v3. */
 export async function openZarrVolume(url: string): Promise<OpenedZarrVolume> {
   const store = new zarr.FetchStore(url, { fetch: fetchWithS3MissingKeyShim })
-  const root = await zarr.open(store, { kind: 'group' })
+  const root = await zarr.open.v3(store, { kind: 'group' })
   const meta = root.attrs as unknown as ZarrVolumeMetadata
   const levels = meta.multiscales[0].datasets.length
   const levelShapes: [number, number, number][] = []
   for (let i = 0; i < levels; i++) {
-    const arr = await zarr.open(root.resolve(String(i)), { kind: 'array' })
+    const arr = await zarr.open.v3(root.resolve(String(i)), { kind: 'array' })
     levelShapes.push(arr.shape as [number, number, number])
   }
   return { url, meta, levels, levelShapes }
@@ -68,8 +62,8 @@ export async function readZarrLevel(
   level: number,
 ): Promise<{ data: Float32Array; dims: [number, number, number] }> {
   const store = new zarr.FetchStore(opened.url, { fetch: fetchWithS3MissingKeyShim })
-  const root = await zarr.open(store, { kind: 'group' })
-  const arr = await zarr.open(root.resolve(String(level)), { kind: 'array' })
+  const root = await zarr.open.v3(store, { kind: 'group' })
+  const arr = await zarr.open.v3(root.resolve(String(level)), { kind: 'array' })
   const result = await zarr.get(arr)
   // zarrita returns C-ordered raw bytes; pymatgen->Zarr writes in C-order too.
   // VASP/marching-cubes expects F-order (flat[i + j*Nx + k*Nx*Ny] = data[i,j,k]).
@@ -126,4 +120,32 @@ export async function fetchZarrVolume(url: string, level = 0): Promise<VolumeDat
   const opened = await openZarrVolume(url)
   const lvl = await readZarrLevel(opened, level)
   return zarrToVolumeData(opened, lvl)
+}
+
+/** Pick a coarse + fine level for progressive loading.
+ *
+ *  Coarse = the coarsest level whose voxel count is >= `coarseMinVoxels`
+ *  (so 220 KB-ish initial paint on a typical 192³ grid, picking L2).
+ *  Fine = coarse - 1 (clamped at 0). For pyramids where every level is
+ *  already small, coarse and fine collapse to the same level — caller
+ *  should detect equality and skip the refine pass.
+ *
+ *  L0 (full res) is intentionally not picked unless every coarser level
+ *  is below `coarseMinVoxels`. To force-load L0, call `readZarrLevel`
+ *  directly with `level=0` instead of going through this helper.
+ */
+export function pickProgressiveLevels(
+  opened: OpenedZarrVolume,
+  coarseMinVoxels = 32 * 32 * 32,
+): { coarseLevel: number; fineLevel: number } {
+  let coarseLevel = 0
+  for (let i = opened.levels - 1; i >= 0; i--) {
+    const [nx, ny, nz] = opened.levelShapes[i]
+    if (nx * ny * nz >= coarseMinVoxels) {
+      coarseLevel = i
+      break
+    }
+  }
+  const fineLevel = Math.max(0, coarseLevel - 1)
+  return { coarseLevel, fineLevel }
 }

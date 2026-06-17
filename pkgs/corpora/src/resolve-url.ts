@@ -11,8 +11,8 @@ const CORPUS_URLS: Record<string, {
       input: 's3://openathena/electrai/input/{task}.CHGCAR',
     },
     zarr: {
-      label: 's3://openathena/electrai/zarr/{task}-label.zarr/',
-      input: 's3://openathena/electrai/zarr/{task}-input.zarr/',
+      label: 'https://tomat-runs-api.openathena.workers.dev/api/files/raw/electrai/zarr-v3mr/{task}-label.zarr/',
+      input: 'https://tomat-runs-api.openathena.workers.dev/api/files/raw/electrai/zarr-v3mr/{task}-input.zarr/',
     },
   },
   'dataset_4': {

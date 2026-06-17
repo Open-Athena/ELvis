@@ -20,7 +20,7 @@ const DEFAULT_URL = 'https://openathena.s3.amazonaws.com/mpdb/v2/mpdb.sqlite'
 
 export function MpPage({ onSelect, onClose }: MpPageProps) {
   const [mpdbUrl] = useUrlState('mpdb', stringParam(DEFAULT_URL))
-  const [tab, setTab] = useUrlState('mp_tab', stringParam('table')) as [Tab, (v: Tab) => void]
+  const [tab, setTab] = useUrlState('mp_tab', stringParam('table')) as unknown as [Tab, (v: Tab) => void]
   const [search, setSearch] = useUrlState('mp_q', stringParam(''), { debounce: 300 })
   const [splitMask] = useUrlState('mp_s', intParam(0b1111))
   const [nAtomsMin, setNAtomsMin] = useUrlState('mp_aMin', optIntParam, { debounce: 300 })

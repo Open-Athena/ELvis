@@ -243,4 +243,43 @@ test.describe('Elvis E2E', () => {
 
     await waitForParam(page, 'si', v => v === '17')
   })
+
+  test('progressive zarr load: coarse chunks before fine chunks', async ({ page }) => {
+    // Live load against tomat's CFW alias for R2 v3mr zarrs. We assert the
+    // progressive-load *ordering* invariant: every chunk read at any coarser
+    // level fires before every chunk read at the next-finer level. Independent
+    // of how many levels the pyramid actually has (varies per mat).
+    const chunkReqs: { level: number; idx: number }[] = []
+    page.on('request', req => {
+      const m = req.url().match(/\.zarr\/(\d+)\/c\//)
+      if (m) chunkReqs.push({ level: parseInt(m[1], 10), idx: chunkReqs.length })
+    })
+
+    const v0 = 'https://tomat-runs-api.openathena.workers.dev/api/files/raw/tomat/rho_gga_v3mr/validation/mp-1797712.zarr/'
+    const v1 = 'https://tomat-runs-api.openathena.workers.dev/api/files/raw/tomat/eval/predictions/train-mg-kl-bin5-fs-tpu/val_200-maskgit/step-89999/mp-1797712.zarr/'
+    await page.goto(`/?s=d&v0=${encodeURIComponent(v0)}&v1=${encodeURIComponent(v1)}`)
+
+    // Wait until we've seen chunks at >= 2 distinct levels.
+    await expect.poll(
+      () => new Set(chunkReqs.map(r => r.level)).size,
+      { timeout: 30000 },
+    ).toBeGreaterThanOrEqual(2)
+
+    // For each adjacent (coarser, finer) pair of observed levels, max coarse
+    // request index must be strictly less than min fine request index — i.e.
+    // all coarse-level fetches happen before any fine-level fetch starts.
+    const byLevel = new Map<number, number[]>()
+    for (const r of chunkReqs) {
+      if (!byLevel.has(r.level)) byLevel.set(r.level, [])
+      byLevel.get(r.level)!.push(r.idx)
+    }
+    const sortedLevels = [...byLevel.keys()].sort((a, b) => b - a) // coarse → fine
+    for (let i = 0; i < sortedLevels.length - 1; i++) {
+      const coarse = sortedLevels[i]
+      const fine = sortedLevels[i + 1]
+      const maxCoarseIdx = Math.max(...byLevel.get(coarse)!)
+      const minFineIdx = Math.min(...byLevel.get(fine)!)
+      expect(maxCoarseIdx, `L${coarse} (coarse) must finish before L${fine} (fine) starts`).toBeLessThan(minFineIdx)
+    }
+  })
 })

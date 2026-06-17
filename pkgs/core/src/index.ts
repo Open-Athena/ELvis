@@ -14,6 +14,7 @@ export {
   readZarrLevel,
   zarrToVolumeData,
   fetchZarrVolume,
+  pickProgressiveLevels,
 } from './storage/zarr-volume.ts'
 export type { OpenedZarrVolume, ZarrVolumeMetadata } from './storage/zarr-volume.ts'
 
