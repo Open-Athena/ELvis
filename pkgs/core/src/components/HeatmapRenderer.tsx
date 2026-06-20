@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import {
   Data3DTexture, DataTexture, RedFormat, FloatType, LinearFilter, ClampToEdgeWrapping,
-  ShaderMaterial, Matrix4, Vector3, Vector4, DoubleSide, BufferGeometry,
+  ShaderMaterial, Matrix4, Vector4, DoubleSide, BufferGeometry,
   Float32BufferAttribute, UVMapping,
 } from 'three'
 import type { VolumeData } from '../types.ts'
@@ -373,7 +373,14 @@ export function HeatmapRenderer({
     uLUT: { value: lutTexture },
     uCartToFrac: { value: cartToFrac.clone() },
     uFracToCart: { value: fracToCartM.clone() },
-    uCameraPos: { value: new Vector3() },
+    // Direct reference to `camera.position` — three.js reads `.x/.y/.z` from
+    // `value` on every draw call (via its internal uniform diff cache), so this
+    // tracks OrbitControls's in-place mutations live. Avoids the historical
+    // `useFrame`-based `.copy()` path, which got stuck after tab backgrounding
+    // and produced the "volume billboarded onto cube faces" artifact (rays from
+    // a stale load-time camera origin → each fragment's ray-march integrated
+    // density along the wrong direction once the user orbited).
+    uCameraPos: { value: camera.position },
     uPadding: { value: tilePadding },
     uFade: { value: tileFade },
     uOpacity: { value: opacity },
@@ -389,7 +396,8 @@ export function HeatmapRenderer({
   useFrame(() => {
     const mat = matRef.current
     if (!mat) return
-    mat.uniforms.uCameraPos.value.copy(camera.position)
+    // `uCameraPos` is bound by reference in `uniforms` above; no per-frame copy
+    // needed. Three.js reads `camera.position.{x,y,z}` live on each draw.
     mat.uniforms.uPadding.value = tilePadding
     mat.uniforms.uFade.value = tileFade
     mat.uniforms.uOpacity.value = opacity
