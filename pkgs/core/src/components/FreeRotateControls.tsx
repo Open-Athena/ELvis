@@ -38,6 +38,11 @@ export function FreeRotateControls({ target, rotSpeed = 0.005 }: FreeRotateContr
   const camera = useThree(s => s.camera)
   const gl = useThree(s => s.gl)
   const set = useThree(s => s.set)
+  // R3F's `frameloop="demand"` only repaints when something invalidates; drei's
+  // built-in controls do this automatically, but this hand-rolled rotator
+  // mutates `camera` directly and would silently fall behind without an
+  // explicit `invalidate()` after each drag delta.
+  const invalidate = useThree(s => s.invalidate)
 
   const targetRef = useRef(new Vector3(...target))
   targetRef.current.set(...target)
@@ -73,6 +78,8 @@ export function FreeRotateControls({ target, rotSpeed = 0.005 }: FreeRotateContr
       const dy = e.clientY - d.y
       d.x = e.clientX
       d.y = e.clientY
+      // Wake the render loop after we mutate the camera below.
+      invalidate()
 
       // Camera's current right/up in world space (apply camera quat to local axes).
       _right.set(1, 0, 0).applyQuaternion(camera.quaternion)
@@ -117,7 +124,7 @@ export function FreeRotateControls({ target, rotSpeed = 0.005 }: FreeRotateContr
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointercancel', onPointerUp)
     }
-  }, [camera, gl, rotSpeed])
+  }, [camera, gl, rotSpeed, invalidate])
 
   // Wheel zoom: dolly camera toward/away from target.
   useEffect(() => {
@@ -129,10 +136,11 @@ export function FreeRotateControls({ target, rotSpeed = 0.005 }: FreeRotateContr
       const factor = Math.pow(0.95, -e.deltaY * 0.01)
       _offset.copy(camera.position).sub(targetRef.current).multiplyScalar(factor)
       camera.position.copy(targetRef.current).add(_offset)
+      invalidate()
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-  }, [camera, gl])
+  }, [camera, gl, invalidate])
 
   // Apply target updates each frame the parent passes in.
   useEffect(() => {

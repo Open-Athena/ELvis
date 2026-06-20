@@ -120,11 +120,13 @@ export function CameraController({
       }
 
       controls.update()
+      // demand-mode: wake the render loop so the camera change paints next tick.
+      invalidate()
     }
 
     canvas.addEventListener('wheel', handler, { passive: false, capture: true })
     return () => canvas.removeEventListener('wheel', handler, { capture: true })
-  }, [gl, camera, controls])
+  }, [gl, camera, controls, invalidate])
 
   // Ctrl+drag → roll (intercept before OrbitControls)
   const rollDragRef = useRef<{ startX: number } | null>(null)
@@ -147,6 +149,7 @@ export function CameraController({
       camera.up.applyAxisAngle(_wFwd, -dx * 0.005)
       camera.lookAt(controls.target)
       controls.update()
+      invalidate()
     }
     const onUp = (e: PointerEvent) => {
       if (!rollDragRef.current) return
@@ -161,7 +164,7 @@ export function CameraController({
       canvas.removeEventListener('pointermove', onMove, { capture: true })
       canvas.removeEventListener('pointerup', onUp, { capture: true })
     }
-  }, [gl, camera, controls])
+  }, [gl, camera, controls, invalidate])
 
   useFrame((_, delta) => {
     if (!controls) return
