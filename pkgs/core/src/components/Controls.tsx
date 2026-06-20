@@ -94,9 +94,16 @@ interface ControlsProps {
   heatmapGamma?: number
   onHeatmapGammaChange?: (v: number) => void
   heatmapLowCutoff?: number
+  /** Live cutoff for the "Low cutoff: X.XX" label — equals preview while
+   *  scrubbing, equals `heatmapLowCutoff` otherwise. The slider/histogram
+   *  positioning still uses `heatmapLowCutoff` (committed). */
+  displayedHeatmapLowCutoff?: number
   onHeatmapLowCutoffChange?: (v: number) => void
   /** Transient low-cutoff preview while hovering the heatmap histogram. */
   onHeatmapLowCutoffPreview?: (v: number | null) => void
+  /** Smooth-lerp the heatmap shader's cutoff between values, vs snapping. */
+  heatmapCutoffAnim?: boolean
+  onHeatmapCutoffAnimChange?: (v: boolean) => void
   /** Symmetric absolute-max for the heatmap histogram x-axis. Defaults to
    *  `maxDensity` (unsigned data); diff mode passes `max(|min|, |max|)`. */
   dataAbsMax?: number
@@ -189,8 +196,11 @@ export function Controls({
   heatmapGamma = 2.5,
   onHeatmapGammaChange,
   heatmapLowCutoff = 0,
+  displayedHeatmapLowCutoff,
   onHeatmapLowCutoffChange,
   onHeatmapLowCutoffPreview,
+  heatmapCutoffAnim,
+  onHeatmapCutoffAnimChange,
   dataAbsMax,
   heatmapStepCount = 256,
   onHeatmapStepCountChange,
@@ -436,7 +446,7 @@ export function Controls({
                 <span title={isDiff
                   ? "Densities with |val| / dataAbsMax below this fraction contribute zero alpha"
                   : "Densities below this fraction contribute zero alpha (hard threshold)"
-                }>Low cutoff: {heatmapLowCutoff.toFixed(2)}</span>
+                }>Low cutoff: {(displayedHeatmapLowCutoff ?? heatmapLowCutoff).toFixed(2)}</span>
                 <button
                   className={styles.resetBtn}
                   onClick={() => onHeatmapLowCutoffChange(0)}
@@ -467,6 +477,16 @@ export function Controls({
                 />
               )}
             </div>
+            {onHeatmapCutoffAnimChange && (
+              <label className={styles.toggle} title="Smoothly lerp the cutoff between values vs snapping (more GPU work, less choppy)">
+                <input
+                  type="checkbox"
+                  checked={!!heatmapCutoffAnim}
+                  onChange={e => onHeatmapCutoffAnimChange(e.target.checked)}
+                />
+                Animate cutoff changes
+              </label>
+            )}
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
                 <span title="Ray-march sample count — higher is smoother but slower">Steps: {heatmapStepCount}</span>

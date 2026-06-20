@@ -1565,6 +1565,11 @@ export default function App() {
   // and pushes it straight to the shader uniform — drag updates land in the
   // 3D viz next frame (~16 ms) instead of after a full React reconciliation.
   const heatmapLowCutoffPreviewRef = useRef<number | null>(null)
+  // Mirror of the preview ref as React state, used ONLY for the "Low cutoff:
+  // X.XX" label so it tracks the live scrub. The shader still reads the ref
+  // (no App re-render needed for the 3D path); this state's re-render only
+  // touches Controls.
+  const [displayedHeatmapLowCutoff, setDisplayedHeatmapLowCutoff] = useState<number | null>(null)
   // Populated by `<InvalidateBridge>` inside the Canvas with R3F's `invalidate`.
   // Wakes the render loop after a ref write so the shader paints next tick.
   const invalidateRef = useRef<(() => void) | null>(null)
@@ -1586,6 +1591,7 @@ export default function App() {
   }, [])
   const setPreviewHeatmapLowCutoff = useCallback((v: number | null) => {
     heatmapLowCutoffPreviewRef.current = v
+    setDisplayedHeatmapLowCutoff(v)
     // Null = clear (hover-out, drag-release): flush immediately so the committed
     // value snaps back without waiting on debounce.
     if (v === null) { flushScrub(); return }
@@ -1927,8 +1933,11 @@ export default function App() {
               heatmapGamma={heatmapGamma}
               onHeatmapGammaChange={setHeatmapGamma}
               heatmapLowCutoff={heatmapLowCutoff}
+              displayedHeatmapLowCutoff={displayedHeatmapLowCutoff ?? heatmapLowCutoff}
               onHeatmapLowCutoffChange={setHeatmapLowCutoff}
               onHeatmapLowCutoffPreview={setPreviewHeatmapLowCutoff}
+              heatmapCutoffAnim={settings.heatmapCutoffAnim}
+              onHeatmapCutoffAnimChange={v => updateSettings({ heatmapCutoffAnim: v })}
               dataAbsMax={dataAbsMax}
               heatmapStepCount={heatmapStepCount}
               onHeatmapStepCountChange={setHeatmapStepCount}
