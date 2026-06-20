@@ -1,5 +1,20 @@
 import { useMemo, useRef, useState, useCallback } from 'react'
-import { turbo, diverging } from '../utils/colormap.ts'
+import { turbo } from '../utils/colormap.ts'
+
+/** Diverging palette tuned for histogram bars: same red/green hue split as the
+ *  shader's `diverging`, but the magnitude curve floors at 0.55 so bars near
+ *  zero stay readable instead of fading into the black background. Pure 3D
+ *  semantics want the fade-to-black at center; the histogram's job is to make
+ *  the distribution legible. */
+function divergingBar(t: number): [number, number, number] {
+  const v = Math.max(0, Math.min(1, t))
+  const u = (v - 0.5) * 2
+  const mag = 0.55 + 0.45 * Math.pow(Math.abs(u), 0.5)
+  const pos: [number, number, number] = [0.10, 0.95, 0.30]
+  const neg: [number, number, number] = [1.00, 0.20, 0.10]
+  const c = u >= 0 ? pos : neg
+  return [mag * c[0] * 255, mag * c[1] * 255, mag * c[2] * 255]
+}
 
 interface HeatmapHistogramProps {
   sortedSamples: Float32Array
@@ -190,7 +205,7 @@ export function HeatmapHistogram({
         // Bar fill = colormap at its center position in the *shader's* normalized
         // space (signed = [-1, +1] → [0, 1] via (v+1)/2 mirroring shader; unsigned = [0, 1]).
         const t = (i + 0.5) / bins
-        const rgb = signed ? diverging(t) : turbo(t)
+        const rgb = signed ? divergingBar(t) : turbo(t)
         return (
           <rect
             key={i}
