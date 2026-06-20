@@ -310,8 +310,18 @@ export function Controls({
         </div>
       )}
 
-      {!useHeatmap && !isDiff && (
+      {!isDiff && onUseHeatmapChange && (
       <DrawerSection id="surface" title="Surface" icon={<Atom size={ICON_SIZE} />} accent={ACCENT.surface} defaultOpen>
+          {/* Iso surface and Volumetric heatmap are mutually exclusive render
+              modes — checking one unchecks the other. Mirrors the toggle in
+              the Heatmap section so iso mode is just as discoverable. Hidden
+              in diff mode (signed data) since iso surfaces are essentially
+              special-case heatmap views there. */}
+          <label className={styles.toggle}>
+            <input type="checkbox" checked={!useHeatmap} onChange={e => onUseHeatmapChange(!e.target.checked)} />
+            Iso surface
+          </label>
+          {!useHeatmap && (<>
           <div className={styles.controlLabel}>
             <div className={styles.sliderHeader}>
               <span>
@@ -385,6 +395,7 @@ export function Controls({
               className={styles.slider}
             />
           </div>
+          </>)}
         </DrawerSection>
       )}
 
