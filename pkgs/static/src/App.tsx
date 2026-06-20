@@ -391,6 +391,10 @@ export default function App() {
   const startMovement = useCallback((dir: string) => {
     activeMovements.current.add(dir)
     cameraInteracted.current = true
+    // Kick the demand-mode R3F loop so CameraController.useFrame picks up the
+    // movement on the next tick — otherwise nothing in the canvas tree changes
+    // and useFrame never fires until something else invalidates.
+    invalidateRef.current?.()
   }, [])
 
   const handleCameraChange = useCallback((theta: number, phi: number, zoom: number, roll: number, targetOffset?: [number, number, number]) => {
@@ -517,6 +521,8 @@ export default function App() {
   const snapCamera = useCallback((snap: CameraSnapTarget) => {
     cameraInteracted.current = true
     cameraSnap.current = snap
+    // Kick demand-mode R3F so CameraController.useFrame picks up the snap.
+    invalidateRef.current?.()
   }, [])
 
   // View toggles: single-letter where free, `t _` sequence where letter conflicts

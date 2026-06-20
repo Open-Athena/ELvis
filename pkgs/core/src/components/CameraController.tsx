@@ -75,6 +75,11 @@ export function CameraController({
 }: CameraControllerProps) {
   const camera = useThree(s => s.camera)
   const controls = useThree(s => s.controls) as { target: Vector3; update: () => void } | null
+  // `frameloop="demand"` only pumps `useFrame` when something invalidates. The
+  // camera setup needs 5 ticks; snap animations + continuous movement need
+  // many. We call `invalidate()` at the end of any frame where work remains so
+  // the render loop keeps spinning while it has something to do, then idles.
+  const invalidate = useThree(s => s.invalidate)
   const snapState = useRef<SnapState | null>(null)
   const lastStepRef = useRef<CameraSnapTarget | null>(null)
   const initFramesRef = useRef(0)
@@ -172,6 +177,8 @@ export function CameraController({
     // Initial camera setup from URL — re-apply for several frames to
     // override OrbitControls which may reset orientation on early frames
     if (initialCamera?.current && initFramesRef.current < 5) {
+      // Keep the demand-mode loop spinning until all 5 init frames complete.
+      invalidate()
       const [theta, phi, zoom, roll] = initialCamera.current
       // Apply target offset (pan) if provided
       if (initialTargetOffset?.current && center) {
@@ -455,6 +462,13 @@ export function CameraController({
             targetOffset,
           )
         }
+      }
+
+      // Keep the demand-mode loop alive while snap animations or held movement
+      // keys are still in flight; without this, frames stop after the first tick
+      // and animations/key-repeats freeze. Idle frames don't invalidate.
+      if (isSnapping || (activeMovements.current?.size ?? 0) > 0 || cameraSnap?.current) {
+        invalidate()
       }
 
       // Report immediately when a snap animation just finished
