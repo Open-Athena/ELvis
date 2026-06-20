@@ -1561,10 +1561,38 @@ export default function App() {
       : computeDefaultIsoLevel(primaryFile.data.grid.data)
   }, [primaryFile, densityQuantiles])
 
-  // Transient iso preview: while user hovers over the DensityHistogram, render
-  // the iso surface at the hovered density without touching the URL. Clears
-  // on hover-out or click-commit (which writes via setIsoLevel).
-  const [previewIsoLevel, setPreviewIsoLevel] = useState<number | null>(null)
+  // Iso scrub follows the same two-tier pattern as the heatmap cutoff:
+  //
+  // - `previewIsoLevel` (instant React state) is used for the "Iso: X.X" label
+  //   and the histogram's yellow marker. App.tsx re-renders on each pointer
+  //   event, but reconciliation is cheap (~5 ms) — the prior bottleneck was
+  //   marching cubes recomputing per move, not React itself.
+  // - `renderedIsoLevel` (debounced) is what `IsosurfaceRenderer` / `VolumeRenderer`
+  //   actually receive. Marching cubes only re-runs ~80 ms after the user
+  //   settles, with a 250 ms watchdog so continuous slow scrubs still update.
+  const [previewIsoLevel, setPreviewIsoLevelState] = useState<number | null>(null)
+  const [renderedIsoLevel, setRenderedIsoLevel] = useState<number | null>(null)
+  const isoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isoLastFlushRef = useRef(0)
+  const setPreviewIsoLevel = useCallback((v: number | null) => {
+    setPreviewIsoLevelState(v)
+    if (v === null) {
+      if (isoDebounceRef.current) { clearTimeout(isoDebounceRef.current); isoDebounceRef.current = null }
+      setRenderedIsoLevel(null)
+      return
+    }
+    const now = performance.now()
+    if (now - isoLastFlushRef.current > 250) {
+      isoLastFlushRef.current = now
+      setRenderedIsoLevel(v)
+      return
+    }
+    if (isoDebounceRef.current) clearTimeout(isoDebounceRef.current)
+    isoDebounceRef.current = setTimeout(() => {
+      isoLastFlushRef.current = performance.now()
+      setRenderedIsoLevel(v)
+    }, 80)
+  }, [])
   // Transient heatmap low-cutoff preview lives in a ref, not React state, so
   // scrubbing the histogram/legend bypasses an App.tsx re-render on every
   // pointer move. The HeatmapRenderer's `useFrame` reads this ref each tick
@@ -1612,16 +1640,27 @@ export default function App() {
   // would render the prior preview indefinitely.
   useEffect(() => { heatmapLowCutoffPreviewRef.current = null }, [heatmapLowCutoff])
 
+  // Used for the "Iso: X.X" label, the histogram marker, and any UI that wants
+  // the value the user is currently scrubbing toward — updates immediately.
   const effectiveIsoLevel = useMemo(
     () => Math.max(0, Math.min(previewIsoLevel ?? isoLevel ?? defaultIsoLevel, maxDensity)),
     [previewIsoLevel, isoLevel, defaultIsoLevel, maxDensity],
   )
+  // Used for the 3D viz prop (marching-cubes / volume renderer). Lags the
+  // preview by the iso debounce (~80 ms) so we don't recompute the geometry
+  // on every pointer event.
+  const effectiveRenderedIsoLevel = useMemo(
+    () => Math.max(0, Math.min(renderedIsoLevel ?? isoLevel ?? defaultIsoLevel, maxDensity)),
+    [renderedIsoLevel, isoLevel, defaultIsoLevel, maxDensity],
+  )
 
   const sampledColor = useMemo(() => {
     if (!colorByDensity || !densityQuantiles) return null
-    const q = densityToQuantile(effectiveIsoLevel, densityQuantiles)
+    // Use the *rendered* iso so the surface color stays in sync with the
+    // (debounced) marching-cubes output instead of flickering during scrub.
+    const q = densityToQuantile(effectiveRenderedIsoLevel, densityQuantiles)
     return sampleRamp(DEFAULT_RAMP, q)
-  }, [colorByDensity, densityQuantiles, effectiveIsoLevel])
+  }, [colorByDensity, densityQuantiles, effectiveRenderedIsoLevel])
 
   /** Quantiles that have pre-computed GLB previews on the server. */
   const GLB_QUANTILES: number[] = [0.50, 0.75, 0.90, 0.95, 0.99]
@@ -1630,7 +1669,8 @@ export default function App() {
     if (!useGlbPreview || !materialId || !densityQuantiles) return null
     const taskId = extractMpId(materialId)
     if (!taskId) return null
-    const q = densityToQuantile(effectiveIsoLevel, densityQuantiles)
+    // Rendered (debounced) so we don't refetch a GLB on every pointermove.
+    const q = densityToQuantile(effectiveRenderedIsoLevel, densityQuantiles)
     // Snap to the nearest pre-computed quantile.
     let best = GLB_QUANTILES[0]
     let bestDiff = Math.abs(q - best)
@@ -1639,7 +1679,7 @@ export default function App() {
       if (diff < bestDiff) { best = cand; bestDiff = diff }
     }
     return `/glb/${taskId}/${best.toFixed(2)}.glb`
-  }, [useGlbPreview, materialId, densityQuantiles, effectiveIsoLevel])
+  }, [useGlbPreview, materialId, densityQuantiles, effectiveRenderedIsoLevel])
 
   // Clamp isoLevel URL param when density range changes (e.g. new material)
   useEffect(() => {
@@ -1699,13 +1739,13 @@ export default function App() {
         </Suspense>
       )}
       <div className={styles.viewer} onPointerDown={() => { cameraInteracted.current = true }}>
-        <ErrorBoundary label="Viewer" resetKey={`${materialId}:${effectiveIsoLevel}`}>
+        <ErrorBoundary label="Viewer" resetKey={`${materialId}:${effectiveRenderedIsoLevel}`}>
           {primaryFile ? (
             <>
               {isComparison ? (
                 <ComparisonView
                   volumes={files.map(f => ({ data: f.data, label: f.filename }))}
-                  isoLevel={effectiveIsoLevel}
+                  isoLevel={effectiveRenderedIsoLevel}
                   opacity={opacity}
                   showAtoms={showAtoms}
                   showAtomLabels={showAtomLabels}
@@ -1725,7 +1765,7 @@ export default function App() {
                       : 'Label (DFT)'
                   }
                   volume={primaryFile.data}
-                  isoLevel={effectiveIsoLevel}
+                  isoLevel={effectiveRenderedIsoLevel}
                   opacity={opacity}
                   showAtoms={showAtoms}
                   showAtomLabels={showAtomLabels}
@@ -1879,7 +1919,7 @@ export default function App() {
         )}
         {exampleLinks}
         {primaryFile && (
-          <ErrorBoundary label="Controls" resetKey={`${materialId}:${effectiveIsoLevel}`}>
+          <ErrorBoundary label="Controls" resetKey={`${materialId}:${effectiveRenderedIsoLevel}`}>
             <Controls
               isDiff={srcRole === 'diff'}
               isoLevel={effectiveIsoLevel}
