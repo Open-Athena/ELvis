@@ -24,6 +24,7 @@ import {
   readZarrLevel,
   zarrToVolumeData,
   pickProgressiveLevels,
+  computeSortedSamples,
   parseS3Pattern,
   DrawerSection,
   DRAWER_EVT,
@@ -1521,6 +1522,11 @@ export default function App() {
   }, [primaryFile])
   densityQuantilesRef.current = densityQuantiles
 
+  const sortedSamples = useMemo(() => {
+    if (!primaryFile) return null
+    return computeSortedSamples(primaryFile.data.grid.data)
+  }, [primaryFile])
+
   const defaultIsoLevel = useMemo(() => {
     if (!primaryFile) return 0
     return densityQuantiles
@@ -1528,9 +1534,14 @@ export default function App() {
       : computeDefaultIsoLevel(primaryFile.data.grid.data)
   }, [primaryFile, densityQuantiles])
 
+  // Transient iso preview: while user hovers over the DensityHistogram, render
+  // the iso surface at the hovered density without touching the URL. Clears
+  // on hover-out or click-commit (which writes via setIsoLevel).
+  const [previewIsoLevel, setPreviewIsoLevel] = useState<number | null>(null)
+
   const effectiveIsoLevel = useMemo(
-    () => Math.max(0, Math.min(isoLevel ?? defaultIsoLevel, maxDensity)),
-    [isoLevel, defaultIsoLevel, maxDensity],
+    () => Math.max(0, Math.min(previewIsoLevel ?? isoLevel ?? defaultIsoLevel, maxDensity)),
+    [previewIsoLevel, isoLevel, defaultIsoLevel, maxDensity],
   )
 
   const sampledColor = useMemo(() => {
@@ -1797,7 +1808,9 @@ export default function App() {
               defaultIsoLevel={defaultIsoLevel}
               maxDensity={maxDensity}
               densityQuantiles={densityQuantiles}
+              sortedSamples={sortedSamples}
               onIsoLevelChange={setIsoLevel}
+              onIsoPreview={setPreviewIsoLevel}
               opacity={opacity}
               onOpacityChange={setOpacity}
               showAtoms={showAtoms}

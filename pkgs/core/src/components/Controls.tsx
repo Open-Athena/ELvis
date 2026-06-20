@@ -3,6 +3,7 @@ import { Atom, Camera, Eye, Flame, Grid3x3, Layers } from 'lucide-react'
 import { getElement, ELEMENT_INFO } from '../utils/elements.ts'
 import { Tooltip } from './Tooltip.tsx'
 import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
+import { DensityHistogram } from './DensityHistogram.tsx'
 import { DrawerSection } from './DrawerSection.tsx'
 import styles from './Controls.module.css'
 
@@ -29,7 +30,11 @@ interface ControlsProps {
   maxDensity: number
   /** Sorted density quantiles: index i = quantile i/(length-1). Enables non-linear slider scaling. */
   densityQuantiles?: Float32Array | null
+  /** Sorted raw-density samples (≈16k). When present, replaces the iso slider with a DensityHistogram. */
+  sortedSamples?: Float32Array | null
   onIsoLevelChange: (v: number) => void
+  /** Transient iso preview (hover) — does not write URL. Null = clear preview. */
+  onIsoPreview?: (v: number | null) => void
   opacity: number
   onOpacityChange: (v: number) => void
   showAtoms: boolean
@@ -122,7 +127,9 @@ export function Controls({
   defaultIsoLevel,
   maxDensity,
   densityQuantiles,
+  sortedSamples,
   onIsoLevelChange,
+  onIsoPreview,
   opacity,
   onOpacityChange,
   showAtoms,
@@ -306,7 +313,16 @@ export function Controls({
                 <ResetIcon />
               </button>
             </div>
-            {densityQuantiles ? (
+            {sortedSamples ? (
+              <DensityHistogram
+                sortedSamples={sortedSamples}
+                isoLevel={isoLevel}
+                defaultIsoLevel={defaultIsoLevel}
+                maxDensity={maxDensity}
+                onCommit={onIsoLevelChange}
+                onPreview={onIsoPreview}
+              />
+            ) : densityQuantiles ? (
               <input
                 type="range"
                 min={0}

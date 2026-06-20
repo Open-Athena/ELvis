@@ -36,12 +36,15 @@ export function IsosurfaceRenderer({ volume, isoLevel, opacity, tiles, tilePaddi
     )
   }, [extended, isoLevel, volume.lattice])
 
-  if (geometry.getAttribute('position')?.count === 0) return null
-
   const fadeCompile = useMemo(() => {
     if (tilePadding <= 0) return undefined
     return tileFadeCompile(volume.lattice, tilePadding, tileFade)
   }, [volume.lattice, tilePadding, tileFade])
+
+  // Early-return AFTER all hooks — React's hook-order rule. Scrubbing iso to
+  // near-zero (vacuum density) produces an empty mesh; returning before the
+  // hooks above crashed the viewer with "Rendered fewer hooks than expected".
+  if (geometry.getAttribute('position')?.count === 0) return null
 
   const tileList = tiles ?? [{ fracOffset: [0, 0, 0] as [number, number, number], cartOffset: [0, 0, 0] as [number, number, number], opacity: 1, isPrimary: true }]
 
