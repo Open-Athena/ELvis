@@ -37,10 +37,6 @@ interface HeatmapHistogramProps {
   previewCutoff?: number | null
 }
 
-/** Quantile above which the long tail is cropped off the x-axis, so the
- *  scrubber is not dominated by a handful of nuclear-core outliers. Applied
- *  to `|sample|` in signed mode. */
-const X_AXIS_QUANTILE = 0.995
 const HEIGHT = 56
 const PAD_TOP = 4
 const PAD_BOTTOM = 12
@@ -56,89 +52,67 @@ export function HeatmapHistogram({
   const [hoverFrac, setHoverFrac] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  // Log-y bars (heavy-tailed density distribution). In signed mode the x-axis
-  // spans [-hi, +hi] symmetrically; in unsigned mode it spans [0, hi].
-  const { bars, maxLogC, hi } = useMemo(() => {
+  // Log-x bins, log-y bars. The x-axis spans [0, dataAbsMax] in log10 space
+  // (signed: bipolar around center, each half log-scaled to ±dataAbsMax). This
+  // gives the cursor full reach (cutoff=1 at the edges) without squishing the
+  // bulk of the distribution into the leftmost pixels — bars stay readable for
+  // both the low-density bulk AND the high-density tail.
+  const L = useMemo(() => Math.max(1e-6, Math.log10(dataAbsMax + 1)), [dataAbsMax])
+
+  // x-frac → signed density. For unsigned, equivalent to f→ density (f≥0).
+  // For signed, f=0.5 → 0 (center), f∈[0,0.5) → negative, f∈(0.5,1] → positive.
+  const fracToDensity = useCallback((f: number): number => {
+    const cf = Math.max(0, Math.min(1, f))
+    if (signed) {
+      const distFromCenter = 2 * cf - 1  // [-1, 1]
+      const sign = distFromCenter >= 0 ? 1 : -1
+      return sign * (Math.pow(10, Math.abs(distFromCenter) * L) - 1)
+    }
+    return Math.pow(10, cf * L) - 1
+  }, [signed, L])
+
+  const { bars, maxLogC } = useMemo(() => {
     const n = sortedSamples.length
-    if (n === 0) return { bars: new Uint32Array(bins), maxLogC: 0, hi: 1 }
-
-    // The x-axis cap respects both the data tail (99.5% quantile of |x|) and
-    // dataAbsMax (so the cutoff handle never sits past the visible range).
-    let absCap: number
-    if (signed) {
-      // `sortedSamples` may include negatives; build |x| 99.5% quantile via a
-      // small probe. We can sample a few entries: smallest/largest both matter
-      // since the array is sorted ascending. Take max of |first|, |last|, and
-      // the 99.5% / 0.5% absolute-quantile candidates.
-      const lo = Math.abs(sortedSamples[Math.floor(0.005 * (n - 1))])
-      const hi = Math.abs(sortedSamples[Math.floor(0.995 * (n - 1))])
-      absCap = Math.max(lo, hi)
-    } else {
-      absCap = sortedSamples[Math.floor(X_AXIS_QUANTILE * (n - 1))]
-    }
-    // Pin `hi` to the data tail (99.5% quantile of |x|) so bar widths stay
-    // stable as the user scrubs cutoff. Floor at `0.05 * dataAbsMax` so the
-    // handle is visible when the histogram is unusually narrow.
-    const hi = Math.max(absCap, dataAbsMax * 0.05)
+    if (n === 0) return { bars: new Uint32Array(bins), maxLogC: 0 }
+    // Precompute log-spaced bin edges in density space. sortedSamples is
+    // ascending, so we can walk once and bucket as edges are crossed.
+    const edges = new Float64Array(bins + 1)
+    for (let i = 0; i <= bins; i++) edges[i] = fracToDensity(i / bins)
     const counts = new Uint32Array(bins)
-
-    if (signed) {
-      // Bins span [-hi, +hi]; bin index i → density `−hi + (i+0.5) * 2hi/bins`.
-      const half = hi
-      const binW = (2 * half) / bins
-      for (let k = 0; k < n; k++) {
-        const v = sortedSamples[k]
-        if (v < -half || v > half) continue
-        let b = Math.floor((v + half) / binW)
-        if (b < 0) b = 0
-        else if (b >= bins) b = bins - 1
-        counts[b]++
-      }
-    } else {
-      const binW = hi / bins
-      // sortedSamples ascending — walk linearly.
-      let j = 0
-      for (let b = 0; b < bins; b++) {
-        const edge = (b + 1) * binW
-        let count = 0
-        while (j < n && sortedSamples[j] <= edge) { count++; j++ }
-        counts[b] = count
-      }
+    let j = 0
+    for (let b = 0; b < bins; b++) {
+      const edgeHi = edges[b + 1]
+      let count = 0
+      while (j < n && sortedSamples[j] <= edgeHi) { count++; j++ }
+      counts[b] = count
     }
-
     let maxLogC = 0
     for (let i = 0; i < bins; i++) {
       const l = Math.log10(counts[i] + 1)
       if (l > maxLogC) maxLogC = l
     }
-    return { bars: counts, maxLogC: Math.max(0.1, maxLogC), hi }
-  }, [sortedSamples, bins, signed, dataAbsMax])
+    return { bars: counts, maxLogC: Math.max(0.1, maxLogC) }
+  }, [sortedSamples, bins, fracToDensity])
 
-  // x ∈ [0, 1] is svg-space. In signed mode 0.5 is density=0; in unsigned 0 is density=0.
+  // Cutoff is always linear in density: c = density / dataAbsMax. We map cursor
+  // position through the log x-axis to a density first, then to a cutoff. For
+  // signed mode the cutoff is the *magnitude* threshold (symmetric ±), so the
+  // returned offset is the half-width (renderer draws 0.5 ± offset).
   const fracToCutoff = useCallback((f: number): number => {
     const cf = Math.max(0, Math.min(1, f))
     if (signed) {
-      // |2f − 1| ∈ [0, 1] = distance from center → maps directly to lowCutoff fraction.
-      // Scale by hi / dataAbsMax so a handle at the visible edge means the cutoff
-      // matches the data's absolute max (i.e. 1.0).
       const distFromCenter = Math.abs(2 * cf - 1)
-      return Math.min(1, distFromCenter * (hi / dataAbsMax))
+      return Math.min(1, (Math.pow(10, distFromCenter * L) - 1) / dataAbsMax)
     }
-    // Unsigned: x-fraction directly maps to density fraction; scale by hi/dataAbsMax.
-    return Math.min(1, cf * (hi / dataAbsMax))
-  }, [signed, hi, dataAbsMax])
+    return Math.min(1, (Math.pow(10, cf * L) - 1) / dataAbsMax)
+  }, [signed, L, dataAbsMax])
 
   const cutoffToFrac = useCallback((c: number): number => {
     const cc = Math.max(0, Math.min(1, c))
-    // Inverse of fracToCutoff: density at cutoff = cc * dataAbsMax. Convert to svg-x.
     const densityAtCutoff = cc * dataAbsMax
-    if (signed) {
-      // density / hi = distFromCenter; svg-x = 0.5 ± distFromCenter/2.
-      const distFromCenter = Math.min(1, densityAtCutoff / hi)
-      return distFromCenter / 2  // returns the *positive-side* offset from center
-    }
-    return Math.min(1, densityAtCutoff / hi)
-  }, [signed, hi, dataAbsMax])
+    const mag = Math.min(1, Math.log10(densityAtCutoff + 1) / L)
+    return signed ? mag / 2 : mag  // signed: half-width offset; unsigned: x-position
+  }, [signed, L, dataAbsMax])
 
   const fracFromEvent = useCallback((clientX: number): number => {
     const svg = svgRef.current
