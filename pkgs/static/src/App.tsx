@@ -1559,10 +1559,20 @@ export default function App() {
   // the iso surface at the hovered density without touching the URL. Clears
   // on hover-out or click-commit (which writes via setIsoLevel).
   const [previewIsoLevel, setPreviewIsoLevel] = useState<number | null>(null)
-  // Transient heatmap low-cutoff preview: hovering the HeatmapHistogram swaps
-  // in the hovered cutoff without writing URL; cleared on hover-out or commit.
-  const [previewHeatmapLowCutoff, setPreviewHeatmapLowCutoff] = useState<number | null>(null)
-  const effectiveHeatmapLowCutoff = previewHeatmapLowCutoff ?? heatmapLowCutoff
+  // Transient heatmap low-cutoff preview lives in a ref, not React state, so
+  // scrubbing the histogram/legend bypasses an App.tsx re-render on every
+  // pointer move. The HeatmapRenderer's `useFrame` reads this ref each tick
+  // and pushes it straight to the shader uniform — drag updates land in the
+  // 3D viz next frame (~16 ms) instead of after a full React reconciliation.
+  const heatmapLowCutoffPreviewRef = useRef<number | null>(null)
+  const setPreviewHeatmapLowCutoff = useCallback((v: number | null) => {
+    heatmapLowCutoffPreviewRef.current = v
+  }, [])
+  // Whenever the committed cutoff changes (URL navigation, slider drop, etc.),
+  // drop the stale preview so `useFrame` falls back to the new committed value.
+  // Without this, a back/forward nav with the cursor still over the histogram
+  // would render the prior preview indefinitely.
+  useEffect(() => { heatmapLowCutoffPreviewRef.current = null }, [heatmapLowCutoff])
 
   const effectiveIsoLevel = useMemo(
     () => Math.max(0, Math.min(previewIsoLevel ?? isoLevel ?? defaultIsoLevel, maxDensity)),
@@ -1702,7 +1712,8 @@ export default function App() {
                   useHeatmap={useHeatmap}
                   heatmapSigned={srcRole === 'diff'}
                   heatmapGamma={heatmapGamma}
-                  heatmapLowCutoff={effectiveHeatmapLowCutoff}
+                  heatmapLowCutoff={heatmapLowCutoff}
+                  heatmapLowCutoffPreviewRef={heatmapLowCutoffPreviewRef}
                   onHeatmapLowCutoffChange={setHeatmapLowCutoff}
                   onHeatmapLowCutoffPreview={setPreviewHeatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}

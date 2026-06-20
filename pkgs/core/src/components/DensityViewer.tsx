@@ -95,6 +95,10 @@ interface DensityViewerProps {
   onHeatmapLowCutoffChange?: (v: number) => void
   /** Transient cutoff preview while dragging the legend handle. */
   onHeatmapLowCutoffPreview?: (v: number | null) => void
+  /** Live cutoff override read by `HeatmapRenderer.useFrame` every tick. When
+   *  set, takes precedence over `heatmapLowCutoff` — drag scrubbing writes here
+   *  to bypass React's render path and push values straight to the shader. */
+  heatmapLowCutoffPreviewRef?: RefObject<number | null>
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -142,6 +146,7 @@ export function DensityViewer({
   heatmapUnits,
   onHeatmapLowCutoffChange,
   onHeatmapLowCutoffPreview,
+  heatmapLowCutoffPreviewRef,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -205,7 +210,7 @@ export function DensityViewer({
         {glbUrl
           ? <GlbPreviewRenderer url={glbUrl} opacity={surfaceOpacityOverride ?? opacity} color={surfaceColor ?? undefined} />
           : useHeatmap
-            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? heatmapOpacity ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} stepCount={heatmapStepCount} equalize={heatmapEqualize} sortedSamples={sortedSamples} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? heatmapOpacity ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} lowCutoffPreviewRef={heatmapLowCutoffPreviewRef} stepCount={heatmapStepCount} equalize={heatmapEqualize} sortedSamples={sortedSamples} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
             : useGpuVolume
               ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
               : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />

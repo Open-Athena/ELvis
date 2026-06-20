@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, type RefObject } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import {
   Data3DTexture, DataTexture, RedFormat, FloatType, LinearFilter, ClampToEdgeWrapping,
@@ -26,6 +26,10 @@ interface HeatmapRendererProps {
   gamma?: number
   /** Density values below this fraction (0–1, normalized) contribute zero alpha. */
   lowCutoff?: number
+  /** Live override read by `useFrame` each tick. When non-null, takes precedence
+   *  over `lowCutoff`. Lets the scrubber UIs update the cutoff at frame rate
+   *  without forcing an App-level React re-render on every pointer event. */
+  lowCutoffPreviewRef?: RefObject<number | null>
   /** Number of ray-march samples per pixel. Higher = smoother but slower. */
   stepCount?: number
   /** Histogram-equalize the density distribution before colormapping. When true,
@@ -295,7 +299,7 @@ void main() {
 `
 
 export function HeatmapRenderer({
-  volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, stepCount = 256,
+  volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, lowCutoffPreviewRef, stepCount = 256,
   clipAtoms = true, equalize = true, sortedSamples,
   tiles: _tiles, tilePadding = 0, tileFade = 1,
 }: HeatmapRendererProps) {
@@ -403,7 +407,7 @@ export function HeatmapRenderer({
     mat.uniforms.uOpacity.value = opacity
     mat.uniforms.uGamma.value = gamma
     mat.uniforms.uStepCount.value = stepCount
-    mat.uniforms.uLowCutoff.value = lowCutoff
+    mat.uniforms.uLowCutoff.value = lowCutoffPreviewRef?.current ?? lowCutoff
     mat.uniforms.uSigned.value = signed ? 1 : 0
     mat.uniforms.uCartToFrac.value.copy(cartToFrac)
     mat.uniforms.uFracToCart.value.copy(fracToCartM)
