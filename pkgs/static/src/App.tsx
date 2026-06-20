@@ -581,6 +581,21 @@ export default function App() {
     defaultBindings: ['m'],
     handler: () => setView('mp'),
   })
+  useAction('app:toggle-domain', {
+    label: 'Toggle domain (prod ⇆ dev)',
+    description: 'Switch between elvis.oa.dev and localhost:3150, preserving path/query/hash',
+    keywords: ['domain', 'host', 'prod', 'dev', 'localhost', 'environment'],
+    group: 'App',
+    defaultBindings: ['t d'],
+    handler: () => {
+      const { pathname, search, hash, host } = window.location
+      const onDev = host === 'localhost:3150'
+      const target = onDev
+        ? `https://elvis.oa.dev${pathname}${search}${hash}`
+        : `http://localhost:3150${pathname}${search}${hash}`
+      window.location.href = target
+    },
+  })
   useAction('drawer:focus-last', {
     label: 'Focus last-touched drawer section',
     description: 'Collapse all sections except the most recently interacted one',
@@ -606,8 +621,9 @@ export default function App() {
   useAction('view:toggle-tiling', {
     label: 'Toggle tiling',
     description: 'Toggle periodic tiling of unit cell',
+    keywords: ['tiling', 'periodic', 'grid'],
     group: 'View',
-    defaultBindings: ['g'],
+    defaultBindings: ['t t'],
     handler: () => setTilePadding(tilePadding > 0 ? 0 : 1),
   })
   useAction('view:set-tile-padding', {
