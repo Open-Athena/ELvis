@@ -123,6 +123,9 @@ interface DensityViewerProps {
   /** When true, the heatmap shader's cutoff uniform eases toward its target
    *  over several ticks; when false, it snaps. UX setting. */
   heatmapCutoffAnim?: boolean
+  /** Cross-widget hover indicator forwarded to `HeatmapLegend` so hovering
+   *  the drawer's HeatmapHistogram lights up the colorbar too. */
+  heatmapPreviewCutoff?: number | null
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -173,6 +176,7 @@ export function DensityViewer({
   heatmapLowCutoffPreviewRef,
   invalidateRef,
   heatmapCutoffAnim,
+  heatmapPreviewCutoff,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -282,6 +286,7 @@ export function DensityViewer({
           sortedSamples={sortedSamples}
           onLowCutoffChange={onHeatmapLowCutoffChange}
           onLowCutoffPreview={onHeatmapLowCutoffPreview}
+          previewCutoff={heatmapPreviewCutoff}
         />
       )}
     </div>

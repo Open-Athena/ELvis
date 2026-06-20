@@ -20,6 +20,11 @@ interface HeatmapLegendProps {
   onLowCutoffChange?: (v: number) => void
   /** Transient cutoff preview during drag/hover. `null` clears. */
   onLowCutoffPreview?: (v: number | null) => void
+  /** Cross-widget hover indicator: render a white preview marker at this
+   *  cutoff value. Shared between the legend and the histogram so hovering
+   *  one widget shows where the cursor would land in the other. `null`
+   *  hides the marker. */
+  previewCutoff?: number | null
 }
 
 const BAR_WIDTH = 22
@@ -38,7 +43,7 @@ function formatValue(v: number): string {
 
 export function HeatmapLegend({
   dataMin, dataMax, signed, gamma, lowCutoff, units, equalize, sortedSamples,
-  onLowCutoffChange, onLowCutoffPreview,
+  onLowCutoffChange, onLowCutoffPreview, previewCutoff,
 }: HeatmapLegendProps) {
   const barRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -195,16 +200,27 @@ export function HeatmapLegend({
             />
           )
         })()}
-        {hoverY != null && !dragging && (
-          <div
-            style={{
-              position: 'absolute', left: -2, right: -2,
-              top: `${hoverY * 100}%`,
-              height: 1, background: '#fff', opacity: 0.6,
-              pointerEvents: 'none',
-            }}
-          />
-        )}
+        {/* Cross-widget hover indicator. Driven by App-level preview state so
+            hovering the heatmap histogram in the drawer also shows where the
+            cursor would land on the colorbar (and vice versa). Hidden during
+            local drag — the yellow live-cutoff marker is already there. */}
+        {previewCutoff != null && !dragging && (() => {
+          const c = Math.max(0, Math.min(1, previewCutoff))
+          const lineStyle = {
+            position: 'absolute' as const, left: -2, right: -2,
+            height: 1, background: '#fff', opacity: 0.6, pointerEvents: 'none' as const,
+          }
+          if (signed) {
+            // Symmetric pair at 0.5 ± c/2 mirrors the yellow committed marker.
+            return (
+              <>
+                <div style={{ ...lineStyle, top: `${(0.5 - c / 2) * 100}%` }} />
+                <div style={{ ...lineStyle, top: `${(0.5 + c / 2) * 100}%` }} />
+              </>
+            )
+          }
+          return <div style={{ ...lineStyle, top: `${(1 - c) * 100}%` }} />
+        })()}
       </div>
       <div
         style={{

@@ -1794,6 +1794,7 @@ export default function App() {
                   heatmapLowCutoffPreviewRef={heatmapLowCutoffPreviewRef}
                   invalidateRef={invalidateRef}
                   heatmapCutoffAnim={settings.heatmapCutoffAnim}
+                  heatmapPreviewCutoff={displayedHeatmapLowCutoff !== null && displayedHeatmapLowCutoff !== heatmapLowCutoff ? displayedHeatmapLowCutoff : null}
                   onHeatmapLowCutoffChange={setHeatmapLowCutoff}
                   onHeatmapLowCutoffPreview={setPreviewHeatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}

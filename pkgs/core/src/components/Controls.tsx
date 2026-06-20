@@ -461,6 +461,7 @@ export function Controls({
                   sortedSamples={sortedSamples}
                   dataAbsMax={dataAbsMax}
                   lowCutoff={heatmapLowCutoff}
+                  previewCutoff={displayedHeatmapLowCutoff !== heatmapLowCutoff ? displayedHeatmapLowCutoff : null}
                   signed={isDiff}
                   onCommit={onHeatmapLowCutoffChange}
                   onPreview={onHeatmapLowCutoffPreview}

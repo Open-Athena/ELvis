@@ -32,6 +32,9 @@ interface HeatmapHistogramProps {
   /** Transient preview while hovering — caller can re-render shader with the
    *  hovered cutoff and clear on hover-out. Pass `null` to clear. */
   onPreview?: (lowCutoffFrac: number | null) => void
+  /** Cross-widget hover indicator (shared with `HeatmapLegend`). Render a white
+   *  marker at this cutoff so hovering the legend also shows here. */
+  previewCutoff?: number | null
 }
 
 /** Quantile above which the long tail is cropped off the x-axis, so the
@@ -47,7 +50,7 @@ function rgbCss([r, g, b]: [number, number, number], a: number): string {
 }
 
 export function HeatmapHistogram({
-  sortedSamples, dataAbsMax, lowCutoff, signed = false, bins = 64, onCommit, onPreview,
+  sortedSamples, dataAbsMax, lowCutoff, signed = false, bins = 64, onCommit, onPreview, previewCutoff,
 }: HeatmapHistogramProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoverFrac, setHoverFrac] = useState<number | null>(null)
@@ -255,14 +258,21 @@ export function HeatmapHistogram({
           vectorEffect="non-scaling-stroke"
         />
       ))}
-      {hoverFrac != null && !dragging && (
-        <line
-          x1={hoverFrac} x2={hoverFrac}
-          y1={0} y2={HEIGHT}
-          stroke="#fff" strokeWidth={1} opacity={0.6}
-          vectorEffect="non-scaling-stroke"
-        />
-      )}
+      {/* Cross-widget hover indicator — shared with HeatmapLegend so hovering
+          the colorbar shows where the cursor would land in the histogram. */}
+      {previewCutoff != null && !dragging && (() => {
+        const off = cutoffToFrac(previewCutoff)
+        const xs = signed ? [0.5 - off, 0.5 + off] : [off]
+        return xs.map((x, i) => (
+          <line
+            key={i}
+            x1={x} x2={x}
+            y1={0} y2={HEIGHT}
+            stroke="#fff" strokeWidth={1} opacity={0.6}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))
+      })()}
     </svg>
   )
 }
