@@ -1565,9 +1565,35 @@ export default function App() {
   // and pushes it straight to the shader uniform — drag updates land in the
   // 3D viz next frame (~16 ms) instead of after a full React reconciliation.
   const heatmapLowCutoffPreviewRef = useRef<number | null>(null)
+  // Populated by `<InvalidateBridge>` inside the Canvas with R3F's `invalidate`.
+  // Wakes the render loop after a ref write so the shader paints next tick.
+  const invalidateRef = useRef<(() => void) | null>(null)
+  // Debounce pointer-move-to-render: the ray-march shader takes ~100 ms per
+  // frame, so naive 60 Hz scrub updates produce ~5 intermediate renders for a
+  // single quick hover (the "animation" Ryan sees). We coalesce: a quick jump
+  // settles for 80 ms, then fires one render with the final cursor position.
+  // A 250 ms watchdog forces a flush during continuous slow motion so the
+  // scrub isn't silent.
+  const scrubDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrubLastFlushRef = useRef(0)
+  const flushScrub = useCallback(() => {
+    if (scrubDebounceRef.current) {
+      clearTimeout(scrubDebounceRef.current)
+      scrubDebounceRef.current = null
+    }
+    scrubLastFlushRef.current = performance.now()
+    invalidateRef.current?.()
+  }, [])
   const setPreviewHeatmapLowCutoff = useCallback((v: number | null) => {
     heatmapLowCutoffPreviewRef.current = v
-  }, [])
+    // Null = clear (hover-out, drag-release): flush immediately so the committed
+    // value snaps back without waiting on debounce.
+    if (v === null) { flushScrub(); return }
+    const now = performance.now()
+    if (now - scrubLastFlushRef.current > 250) { flushScrub(); return }
+    if (scrubDebounceRef.current) clearTimeout(scrubDebounceRef.current)
+    scrubDebounceRef.current = setTimeout(flushScrub, 80)
+  }, [flushScrub])
   // Whenever the committed cutoff changes (URL navigation, slider drop, etc.),
   // drop the stale preview so `useFrame` falls back to the new committed value.
   // Without this, a back/forward nav with the cursor still over the histogram
@@ -1714,6 +1740,7 @@ export default function App() {
                   heatmapGamma={heatmapGamma}
                   heatmapLowCutoff={heatmapLowCutoff}
                   heatmapLowCutoffPreviewRef={heatmapLowCutoffPreviewRef}
+                  invalidateRef={invalidateRef}
                   onHeatmapLowCutoffChange={setHeatmapLowCutoff}
                   onHeatmapLowCutoffPreview={setPreviewHeatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}

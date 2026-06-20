@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, TrackballControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
@@ -24,6 +24,22 @@ import { HeatmapLegend } from './HeatmapLegend.tsx'
 
 const _projA = new Vector3()
 const _projB = new Vector3()
+
+/** Lives inside the R3F Canvas, grabs `invalidate` via `useThree`, and exposes
+ *  it through a parent-owned ref. External (non-Canvas) code can then call
+ *  `invalidateRef.current?.()` to schedule a frame — e.g. a histogram scrubber
+ *  writing to a shared uniform ref still needs to nudge R3F to render. */
+function InvalidateBridge({ invalidateRef }: {
+  invalidateRef?: MutableRefObject<(() => void) | null>
+}) {
+  const invalidate = useThree(s => s.invalidate)
+  useEffect(() => {
+    if (!invalidateRef) return
+    invalidateRef.current = invalidate
+    return () => { invalidateRef.current = null }
+  }, [invalidate, invalidateRef])
+  return null
+}
 
 /** Projects face centers at slice idx 0 and N to screen; writes ±1 to signRef */
 function SliceSignUpdater({ lattice, sliceAxis, signRef }: {
@@ -99,6 +115,11 @@ interface DensityViewerProps {
    *  set, takes precedence over `heatmapLowCutoff` — drag scrubbing writes here
    *  to bypass React's render path and push values straight to the shader. */
   heatmapLowCutoffPreviewRef?: RefObject<number | null>
+  /** Filled by `<InvalidateBridge>` inside the Canvas with R3F's `invalidate`
+   *  function. External scrubbers call it after writing a uniform ref so the
+   *  shader paints next animation tick instead of waiting for some other event
+   *  to wake the render loop. */
+  invalidateRef?: MutableRefObject<(() => void) | null>
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -147,6 +168,7 @@ export function DensityViewer({
   onHeatmapLowCutoffChange,
   onHeatmapLowCutoffPreview,
   heatmapLowCutoffPreviewRef,
+  invalidateRef,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -202,7 +224,12 @@ export function DensityViewer({
       <Canvas
         camera={{ position: cameraPosition.toArray(), fov: 50, near: 0.1, far: 500 }}
         style={{ background: '#000' }}
+        frameloop="demand"
       >
+        {/* Bridge `invalidate` out to App.tsx so the debounced scrubber path can
+            schedule a render after writing to a uniform ref. Required because
+            `frameloop="demand"` only runs `useFrame` when something invalidates. */}
+        <InvalidateBridge invalidateRef={invalidateRef} />
         <ambientLight intensity={0.6} />
         <directionalLight position={[10, 10, 10]} intensity={0.8} />
         <directionalLight position={[-5, -5, 5]} intensity={0.4} />
