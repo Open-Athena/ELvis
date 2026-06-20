@@ -158,36 +158,44 @@ export function HeatmapLegend({
         onPointerDown={handleDown}
         onPointerUp={handleUp}
       >
-        {/* Signed mode: paired cutoff lines symmetric around the center. Unsigned: single line. */}
-        {signed ? lowCutoff > 0 && (
-          <>
+        {/* During drag, drive the marker from local hoverY directly so it
+            tracks the cursor without waiting on the App-level re-render. */}
+        {(() => {
+          const liveCutoff = dragging && hoverY != null ? yFracToCutoff(hoverY) : lowCutoff
+          if (liveCutoff <= 0) return null
+          if (signed) {
+            return (
+              <>
+                <div
+                  title={`Low cutoff: ${liveCutoff.toFixed(2)}`}
+                  style={{
+                    position: 'absolute', left: -2, right: -2,
+                    top: `${(0.5 - liveCutoff / 2) * 100}%`,
+                    height: 1, background: '#ffcc66', opacity: 0.85,
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute', left: -2, right: -2,
+                    top: `${(0.5 + liveCutoff / 2) * 100}%`,
+                    height: 1, background: '#ffcc66', opacity: 0.85,
+                  }}
+                />
+              </>
+            )
+          }
+          return (
             <div
-              title={`Low cutoff: ${lowCutoff.toFixed(2)}`}
+              title={`Low cutoff: ${liveCutoff.toFixed(2)}`}
               style={{
                 position: 'absolute', left: -2, right: -2,
-                top: `${(0.5 - lowCutoff / 2) * 100}%`,
+                top: `${(1 - liveCutoff) * 100}%`,
                 height: 1, background: '#ffcc66', opacity: 0.85,
               }}
             />
-            <div
-              style={{
-                position: 'absolute', left: -2, right: -2,
-                top: `${(0.5 + lowCutoff / 2) * 100}%`,
-                height: 1, background: '#ffcc66', opacity: 0.85,
-              }}
-            />
-          </>
-        ) : lowCutoff > 0 && (
-          <div
-            title={`Low cutoff: ${lowCutoff.toFixed(2)}`}
-            style={{
-              position: 'absolute', left: -2, right: -2,
-              top: `${(1 - lowCutoff) * 100}%`,
-              height: 1, background: '#ffcc66', opacity: 0.85,
-            }}
-          />
-        )}
-        {hoverY != null && (
+          )
+        })()}
+        {hoverY != null && !dragging && (
           <div
             style={{
               position: 'absolute', left: -2, right: -2,

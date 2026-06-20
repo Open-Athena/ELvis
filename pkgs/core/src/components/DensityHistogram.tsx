@@ -129,6 +129,10 @@ export function DensityHistogram({
   const barW = 1 / bins
   const usableH = HEIGHT - PAD_TOP - PAD_BOTTOM
 
+  // While dragging, drive the iso marker from local hoverFrac so it tracks
+  // the cursor without waiting on a full App-level re-render round-trip.
+  const liveIsoFrac = dragging && hoverFrac != null ? hoverFrac : isoFrac
+
   return (
     <svg
       ref={svgRef}
@@ -170,12 +174,12 @@ export function DensityHistogram({
         vectorEffect="non-scaling-stroke"
       />
       <line
-        x1={isoFrac} x2={isoFrac}
+        x1={liveIsoFrac} x2={liveIsoFrac}
         y1={0} y2={HEIGHT}
         stroke="#ffcc66" strokeWidth={1.5}
         vectorEffect="non-scaling-stroke"
       />
-      {hoverFrac != null && (
+      {hoverFrac != null && !dragging && (
         <line
           x1={hoverFrac} x2={hoverFrac}
           y1={0} y2={HEIGHT}

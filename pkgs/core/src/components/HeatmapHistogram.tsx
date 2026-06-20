@@ -174,11 +174,16 @@ export function HeatmapHistogram({
   const barW = 1 / bins
   const usableH = HEIGHT - PAD_TOP - PAD_BOTTOM
 
-  // Cutoff lines: unsigned = single line at cutoff; signed = pair at 0.5 ± offset.
-  const cutoffOffset = cutoffToFrac(lowCutoff)
+  // While dragging, drive the cutoff overlay from local hoverFrac so the
+  // marker tracks the cursor immediately — the same value is in flight to the
+  // App-level preview state but a parent re-render round-trip would otherwise
+  // visibly lag the marker behind the cursor for a frame or two.
+  const liveCutoffOffset = dragging && hoverFrac != null
+    ? (signed ? Math.abs(hoverFrac - 0.5) : Math.min(1, hoverFrac))
+    : cutoffToFrac(lowCutoff)
   const cutoffLines = signed
-    ? [0.5 - cutoffOffset, 0.5 + cutoffOffset]
-    : [cutoffOffset]
+    ? [0.5 - liveCutoffOffset, 0.5 + liveCutoffOffset]
+    : [liveCutoffOffset]
 
   return (
     <svg
@@ -221,14 +226,14 @@ export function HeatmapHistogram({
       {/* Shaded region: where the shader gates alpha to 0. */}
       {signed ? (
         <rect
-          x={0.5 - cutoffOffset} y={0}
-          width={cutoffOffset * 2} height={HEIGHT}
+          x={0.5 - liveCutoffOffset} y={0}
+          width={liveCutoffOffset * 2} height={HEIGHT}
           fill="rgba(0,0,0,0.75)"
         />
-      ) : cutoffOffset > 0 && (
+      ) : liveCutoffOffset > 0 && (
         <rect
           x={0} y={0}
-          width={cutoffOffset} height={HEIGHT}
+          width={liveCutoffOffset} height={HEIGHT}
           fill="rgba(0,0,0,0.75)"
         />
       )}
@@ -250,7 +255,7 @@ export function HeatmapHistogram({
           vectorEffect="non-scaling-stroke"
         />
       ))}
-      {hoverFrac != null && (
+      {hoverFrac != null && !dragging && (
         <line
           x1={hoverFrac} x2={hoverFrac}
           y1={0} y2={HEIGHT}
