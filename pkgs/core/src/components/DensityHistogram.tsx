@@ -99,12 +99,13 @@ export function DensityHistogram({
     return r.width > 0 ? (clientX - r.left) / r.width : 0
   }, [])
 
+  // Drag-time writes go to the preview state (instant) instead of the
+  // debounced URL setter; URL commit fires once on release. Eliminates the
+  // 300 ms scrub lag without losing the per-frame preview feel.
   const handleMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const f = fracFromEvent(e.clientX)
     setHoverFrac(f)
-    const d = fracToDensity(f)
-    if (dragging) onCommit(d)
-    else onPreview?.(d)
+    onPreview?.(fracToDensity(f))
   }
 
   const handleLeave = () => {
@@ -115,13 +116,13 @@ export function DensityHistogram({
   const handleDown = (e: React.PointerEvent<SVGSVGElement>) => {
     setDragging(true)
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
-    onCommit(fracToDensity(fracFromEvent(e.clientX)))
-    onPreview?.(null)
+    onPreview?.(fracToDensity(fracFromEvent(e.clientX)))
   }
 
   const handleUp = (e: React.PointerEvent<SVGSVGElement>) => {
     setDragging(false)
     ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+    onCommit(fracToDensity(fracFromEvent(e.clientX)))
     onPreview?.(null)
   }
 

@@ -91,6 +91,10 @@ interface DensityViewerProps {
   heatmapEqualize?: boolean
   /** Units suffix for the heatmap legend (e.g. "e/Å³"). */
   heatmapUnits?: string
+  /** Commit a new heatmap low-cutoff (URL write) when the user drops the legend handle. */
+  onHeatmapLowCutoffChange?: (v: number) => void
+  /** Transient cutoff preview while dragging the legend handle. */
+  onHeatmapLowCutoffPreview?: (v: number | null) => void
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -136,6 +140,8 @@ export function DensityViewer({
   heatmapOpacity,
   heatmapEqualize,
   heatmapUnits,
+  onHeatmapLowCutoffChange,
+  onHeatmapLowCutoffPreview,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -238,6 +244,8 @@ export function DensityViewer({
           units={heatmapUnits}
           equalize={heatmapEqualize}
           sortedSamples={sortedSamples}
+          onLowCutoffChange={onHeatmapLowCutoffChange}
+          onLowCutoffPreview={onHeatmapLowCutoffPreview}
         />
       )}
     </div>

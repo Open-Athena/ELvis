@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { turbo, diverging } from '../utils/colormap.ts'
 import { densityAtQuantile } from '../utils/density-quantile.ts'
 
@@ -15,6 +15,11 @@ interface HeatmapLegendProps {
    *  count). When false, ticks are linear interpolation of `[dataMin, dataMax]`. */
   equalize?: boolean
   sortedSamples?: Float32Array
+  /** Commit a low-cutoff fraction on pointer release (URL write). When absent,
+   *  the colorbar stays non-interactive (legacy display-only mode). */
+  onLowCutoffChange?: (v: number) => void
+  /** Transient cutoff preview during drag/hover. `null` clears. */
+  onLowCutoffPreview?: (v: number | null) => void
 }
 
 const BAR_WIDTH = 22
@@ -31,7 +36,55 @@ function formatValue(v: number): string {
   return v.toFixed(1)
 }
 
-export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, units, equalize, sortedSamples }: HeatmapLegendProps) {
+export function HeatmapLegend({
+  dataMin, dataMax, signed, gamma, lowCutoff, units, equalize, sortedSamples,
+  onLowCutoffChange, onLowCutoffPreview,
+}: HeatmapLegendProps) {
+  const barRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [hoverY, setHoverY] = useState<number | null>(null)
+  const interactive = !!onLowCutoffChange
+
+  // y ∈ [0, 1] from top of bar → cutoff fraction. Unsigned: top=high, bottom=0,
+  // so cutoff = 1 − y (the shader gates v < cutoff). Signed: cutoff measures
+  // distance from the bar's center, so cutoff = |2y − 1|.
+  const yFracToCutoff = useCallback((yf: number): number => {
+    const y = Math.max(0, Math.min(1, yf))
+    return signed ? Math.abs(2 * y - 1) : 1 - y
+  }, [signed])
+
+  const yFracFromEvent = useCallback((clientY: number): number => {
+    const r = barRef.current?.getBoundingClientRect()
+    if (!r || r.height <= 0) return 0
+    return (clientY - r.top) / r.height
+  }, [])
+
+  const handleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!interactive) return
+    const yf = yFracFromEvent(e.clientY)
+    setHoverY(yf)
+    onLowCutoffPreview?.(yFracToCutoff(yf))
+  }
+
+  const handleLeave = () => {
+    setHoverY(null)
+    if (!dragging) onLowCutoffPreview?.(null)
+  }
+
+  const handleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!interactive) return
+    setDragging(true)
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    onLowCutoffPreview?.(yFracToCutoff(yFracFromEvent(e.clientY)))
+  }
+
+  const handleUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!interactive) return
+    setDragging(false)
+    ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+    onLowCutoffChange?.(yFracToCutoff(yFracFromEvent(e.clientY)))
+    onLowCutoffPreview?.(null)
+  }
   const gradient = useMemo(() => {
     // CSS linear-gradient: bottom (0%, low) → top (100%, high). Alpha follows the
     // shader's `pow(v, gamma)` curve so the legend visually matches the rendering.
@@ -74,7 +127,9 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
         display: 'flex',
         alignItems: 'flex-start',
         gap: 6,
-        pointerEvents: 'none',
+        // Container can pass pointer events through; only the interactive bar
+        // claims them (`pointerEvents: 'auto'`). Setting `none` here would
+        // block hit-testing of children in some browsers (Chrome on macOS).
         zIndex: 1,
         fontFamily: 'system-ui, sans-serif',
         fontSize: 11,
@@ -83,6 +138,7 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
       }}
     >
       <div
+        ref={barRef}
         style={{
           position: 'relative',
           width: BAR_WIDTH,
@@ -93,19 +149,51 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
           backgroundImage: `${gradient}, repeating-conic-gradient(#1a1a1a 0% 25%, #252525 0% 50%)`,
           backgroundSize: `100% 100%, 8px 8px`,
           border: '1px solid #444',
+          pointerEvents: interactive ? 'auto' : 'none',
+          cursor: interactive ? 'crosshair' : 'default',
+          touchAction: interactive ? 'none' : 'auto',
         }}
+        onPointerMove={handleMove}
+        onPointerLeave={handleLeave}
+        onPointerDown={handleDown}
+        onPointerUp={handleUp}
       >
-        {lowCutoff > 0 && (
+        {/* Signed mode: paired cutoff lines symmetric around the center. Unsigned: single line. */}
+        {signed ? lowCutoff > 0 && (
+          <>
+            <div
+              title={`Low cutoff: ${lowCutoff.toFixed(2)}`}
+              style={{
+                position: 'absolute', left: -2, right: -2,
+                top: `${(0.5 - lowCutoff / 2) * 100}%`,
+                height: 1, background: '#ffcc66', opacity: 0.85,
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute', left: -2, right: -2,
+                top: `${(0.5 + lowCutoff / 2) * 100}%`,
+                height: 1, background: '#ffcc66', opacity: 0.85,
+              }}
+            />
+          </>
+        ) : lowCutoff > 0 && (
           <div
             title={`Low cutoff: ${lowCutoff.toFixed(2)}`}
             style={{
-              position: 'absolute',
-              left: -2,
-              right: -2,
+              position: 'absolute', left: -2, right: -2,
               top: `${(1 - lowCutoff) * 100}%`,
-              height: 1,
-              background: '#fff',
-              opacity: 0.7,
+              height: 1, background: '#ffcc66', opacity: 0.85,
+            }}
+          />
+        )}
+        {hoverY != null && (
+          <div
+            style={{
+              position: 'absolute', left: -2, right: -2,
+              top: `${hoverY * 100}%`,
+              height: 1, background: '#fff', opacity: 0.6,
+              pointerEvents: 'none',
             }}
           />
         )}
@@ -115,6 +203,7 @@ export function HeatmapLegend({ dataMin, dataMax, signed, gamma, lowCutoff, unit
           position: 'relative',
           height: BAR_HEIGHT,
           minWidth: 56,
+          pointerEvents: 'none',
         }}
       >
         {ticks.map(({ fraction, value }) => (

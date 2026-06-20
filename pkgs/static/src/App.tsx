@@ -1703,6 +1703,8 @@ export default function App() {
                   heatmapSigned={srcRole === 'diff'}
                   heatmapGamma={heatmapGamma}
                   heatmapLowCutoff={effectiveHeatmapLowCutoff}
+                  onHeatmapLowCutoffChange={setHeatmapLowCutoff}
+                  onHeatmapLowCutoffPreview={setPreviewHeatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}
                   heatmapOpacity={heatmapOpacity}
                   heatmapEqualize={heatmapEqualize}
