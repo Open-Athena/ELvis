@@ -31,6 +31,9 @@ interface HeatmapRendererProps {
    *  over `lowCutoff`. Lets the scrubber UIs update the cutoff at frame rate
    *  without forcing an App-level React re-render on every pointer event. */
   lowCutoffPreviewRef?: RefObject<number | null>
+  /** When true, the cutoff uniform eases toward the target with a per-tick
+   *  exponential lerp; when false (or omitted) it snaps directly. */
+  lowCutoffAnim?: boolean
   /** Number of ray-march samples per pixel. Higher = smoother but slower. */
   stepCount?: number
   /** Histogram-equalize the density distribution before colormapping. When true,
@@ -300,12 +303,17 @@ void main() {
 `
 
 export function HeatmapRenderer({
-  volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, lowCutoffPreviewRef, stepCount = 256,
+  volume, dataMin, dataMax, signed = false, opacity, gamma = 2.5, lowCutoff = 0, lowCutoffPreviewRef, lowCutoffAnim = false, stepCount = 256,
   clipAtoms = true, equalize = true, sortedSamples,
   tiles: _tiles, tilePadding = 0, tileFade = 1,
 }: HeatmapRendererProps) {
   const { camera } = useThree()
+  const invalidate = useThree(s => s.invalidate)
   const matRef = useRef<ShaderMaterial>(null)
+  // Currently-displayed cutoff (animated target chases `lowCutoffPreviewRef ?? lowCutoff`).
+  // Lerp lives in `useFrame` below; `invalidate()` keeps the loop spinning until
+  // we're within ε of the target so we don't burn frames after the animation settles.
+  const displayedCutoffRef = useRef(lowCutoff)
   const { dims, data } = volume.grid
 
   const texture = useMemo(() => {
@@ -408,7 +416,22 @@ export function HeatmapRenderer({
     mat.uniforms.uOpacity.value = opacity
     mat.uniforms.uGamma.value = gamma
     mat.uniforms.uStepCount.value = stepCount
-    mat.uniforms.uLowCutoff.value = lowCutoffPreviewRef?.current ?? lowCutoff
+    const target = lowCutoffPreviewRef?.current ?? lowCutoff
+    if (lowCutoffAnim) {
+      const diff = target - displayedCutoffRef.current
+      if (Math.abs(diff) > 0.001) {
+        // ~30% closer per tick → ~5-6 perceptible steps for a full-range change
+        // even on slow GPUs (each tick = one ray-march). `invalidate()` keeps
+        // demand-mode useFrame firing until we've settled.
+        displayedCutoffRef.current += diff * 0.3
+        invalidate()
+      } else {
+        displayedCutoffRef.current = target
+      }
+    } else {
+      displayedCutoffRef.current = target
+    }
+    mat.uniforms.uLowCutoff.value = displayedCutoffRef.current
     mat.uniforms.uSigned.value = signed ? 1 : 0
     mat.uniforms.uCartToFrac.value.copy(cartToFrac)
     mat.uniforms.uFracToCart.value.copy(fracToCartM)

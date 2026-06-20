@@ -59,6 +59,23 @@ export function Settings({ settings, onUpdate, showCacheToggle = true, lineWidth
         />
         MB
       </label>
+      <label style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: 13,
+        color: '#ccc',
+        cursor: 'pointer',
+        marginTop: 6,
+      }}>
+        <input
+          type="checkbox"
+          checked={settings.heatmapCutoffAnim}
+          onChange={e => onUpdate({ heatmapCutoffAnim: e.target.checked })}
+          style={{ accentColor: '#4a9eff' }}
+        />
+        Animate heatmap cutoff changes
+      </label>
       {onLineWidthChange && (
         <label style={{
           display: 'flex',

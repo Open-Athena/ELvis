@@ -120,6 +120,9 @@ interface DensityViewerProps {
    *  shader paints next animation tick instead of waiting for some other event
    *  to wake the render loop. */
   invalidateRef?: MutableRefObject<(() => void) | null>
+  /** When true, the heatmap shader's cutoff uniform eases toward its target
+   *  over several ticks; when false, it snaps. UX setting. */
+  heatmapCutoffAnim?: boolean
   /** If set, bypass live isosurface extraction and render a pre-computed GLB preview. */
   glbUrl?: string | null
   /** Override surface color/opacity (e.g. from density-quantile ramp). If null, renderers use defaults. */
@@ -169,6 +172,7 @@ export function DensityViewer({
   onHeatmapLowCutoffPreview,
   heatmapLowCutoffPreviewRef,
   invalidateRef,
+  heatmapCutoffAnim,
   glbUrl,
   surfaceColor,
   surfaceOpacityOverride,
@@ -237,7 +241,7 @@ export function DensityViewer({
         {glbUrl
           ? <GlbPreviewRenderer url={glbUrl} opacity={surfaceOpacityOverride ?? opacity} color={surfaceColor ?? undefined} />
           : useHeatmap
-            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? heatmapOpacity ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} lowCutoffPreviewRef={heatmapLowCutoffPreviewRef} stepCount={heatmapStepCount} equalize={heatmapEqualize} sortedSamples={sortedSamples} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
+            ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? heatmapOpacity ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} lowCutoffPreviewRef={heatmapLowCutoffPreviewRef} lowCutoffAnim={heatmapCutoffAnim} stepCount={heatmapStepCount} equalize={heatmapEqualize} sortedSamples={sortedSamples} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
             : useGpuVolume
               ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
               : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
