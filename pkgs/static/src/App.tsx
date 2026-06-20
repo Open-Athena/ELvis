@@ -1523,13 +1523,18 @@ export default function App() {
     e.target.value = ''
   }, [])
 
-  const maxDensity = useMemo(() => {
-    if (!primaryFile) return 1
+  const { maxDensity, dataAbsMax } = useMemo(() => {
+    if (!primaryFile) return { maxDensity: 1, dataAbsMax: 1 }
     let max = 0
-    for (let i = 0; i < primaryFile.data.grid.data.length; i++) {
-      if (primaryFile.data.grid.data[i] > max) max = primaryFile.data.grid.data[i]
+    let absMax = 0
+    const arr = primaryFile.data.grid.data
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i]
+      if (v > max) max = v
+      const a = Math.abs(v)
+      if (a > absMax) absMax = a
     }
-    return max
+    return { maxDensity: max, dataAbsMax: absMax || 1 }
   }, [primaryFile])
 
   const densityQuantiles = useMemo(() => {
@@ -1554,6 +1559,10 @@ export default function App() {
   // the iso surface at the hovered density without touching the URL. Clears
   // on hover-out or click-commit (which writes via setIsoLevel).
   const [previewIsoLevel, setPreviewIsoLevel] = useState<number | null>(null)
+  // Transient heatmap low-cutoff preview: hovering the HeatmapHistogram swaps
+  // in the hovered cutoff without writing URL; cleared on hover-out or commit.
+  const [previewHeatmapLowCutoff, setPreviewHeatmapLowCutoff] = useState<number | null>(null)
+  const effectiveHeatmapLowCutoff = previewHeatmapLowCutoff ?? heatmapLowCutoff
 
   const effectiveIsoLevel = useMemo(
     () => Math.max(0, Math.min(previewIsoLevel ?? isoLevel ?? defaultIsoLevel, maxDensity)),
@@ -1693,7 +1702,7 @@ export default function App() {
                   useHeatmap={useHeatmap}
                   heatmapSigned={srcRole === 'diff'}
                   heatmapGamma={heatmapGamma}
-                  heatmapLowCutoff={heatmapLowCutoff}
+                  heatmapLowCutoff={effectiveHeatmapLowCutoff}
                   heatmapStepCount={heatmapStepCount}
                   heatmapOpacity={heatmapOpacity}
                   heatmapEqualize={heatmapEqualize}
@@ -1878,6 +1887,8 @@ export default function App() {
               onHeatmapGammaChange={setHeatmapGamma}
               heatmapLowCutoff={heatmapLowCutoff}
               onHeatmapLowCutoffChange={setHeatmapLowCutoff}
+              onHeatmapLowCutoffPreview={setPreviewHeatmapLowCutoff}
+              dataAbsMax={dataAbsMax}
               heatmapStepCount={heatmapStepCount}
               onHeatmapStepCountChange={setHeatmapStepCount}
               heatmapOpacity={heatmapOpacity}

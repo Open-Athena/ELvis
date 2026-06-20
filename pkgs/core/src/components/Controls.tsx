@@ -4,6 +4,7 @@ import { getElement, ELEMENT_INFO } from '../utils/elements.ts'
 import { Tooltip } from './Tooltip.tsx'
 import { densityToQuantile, quantileToDensity } from '../utils/color-ramp.ts'
 import { DensityHistogram } from './DensityHistogram.tsx'
+import { HeatmapHistogram } from './HeatmapHistogram.tsx'
 import { DrawerSection } from './DrawerSection.tsx'
 import styles from './Controls.module.css'
 
@@ -94,6 +95,11 @@ interface ControlsProps {
   onHeatmapGammaChange?: (v: number) => void
   heatmapLowCutoff?: number
   onHeatmapLowCutoffChange?: (v: number) => void
+  /** Transient low-cutoff preview while hovering the heatmap histogram. */
+  onHeatmapLowCutoffPreview?: (v: number | null) => void
+  /** Symmetric absolute-max for the heatmap histogram x-axis. Defaults to
+   *  `maxDensity` (unsigned data); diff mode passes `max(|min|, |max|)`. */
+  dataAbsMax?: number
   heatmapStepCount?: number
   onHeatmapStepCountChange?: (v: number) => void
   /** Zarr data-source toggle (prefer chunked multi-res zarr where available). */
@@ -184,6 +190,8 @@ export function Controls({
   onHeatmapGammaChange,
   heatmapLowCutoff = 0,
   onHeatmapLowCutoffChange,
+  onHeatmapLowCutoffPreview,
+  dataAbsMax,
   heatmapStepCount = 256,
   onHeatmapStepCountChange,
   useZarr,
@@ -425,7 +433,10 @@ export function Controls({
             </div>
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
-                <span title="Densities below this fraction contribute zero alpha (hard threshold)">Low cutoff: {heatmapLowCutoff.toFixed(2)}</span>
+                <span title={isDiff
+                  ? "Densities with |val| / dataAbsMax below this fraction contribute zero alpha"
+                  : "Densities below this fraction contribute zero alpha (hard threshold)"
+                }>Low cutoff: {heatmapLowCutoff.toFixed(2)}</span>
                 <button
                   className={styles.resetBtn}
                   onClick={() => onHeatmapLowCutoffChange(0)}
@@ -435,15 +446,26 @@ export function Controls({
                   <ResetIcon />
                 </button>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={0.5}
-                step={0.01}
-                value={heatmapLowCutoff}
-                onChange={e => onHeatmapLowCutoffChange(parseFloat(e.target.value))}
-                className={styles.slider}
-              />
+              {sortedSamples && dataAbsMax ? (
+                <HeatmapHistogram
+                  sortedSamples={sortedSamples}
+                  dataAbsMax={dataAbsMax}
+                  lowCutoff={heatmapLowCutoff}
+                  signed={isDiff}
+                  onCommit={onHeatmapLowCutoffChange}
+                  onPreview={onHeatmapLowCutoffPreview}
+                />
+              ) : (
+                <input
+                  type="range"
+                  min={0}
+                  max={0.5}
+                  step={0.01}
+                  value={heatmapLowCutoff}
+                  onChange={e => onHeatmapLowCutoffChange(parseFloat(e.target.value))}
+                  className={styles.slider}
+                />
+              )}
             </div>
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>

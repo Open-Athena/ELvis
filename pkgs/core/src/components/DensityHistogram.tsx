@@ -165,18 +165,21 @@ export function DensityHistogram({
       <line
         x1={defaultFrac} x2={defaultFrac}
         y1={PAD_TOP} y2={HEIGHT - PAD_BOTTOM}
-        stroke="#666" strokeWidth={0.003} strokeDasharray="0.008 0.006"
+        stroke="#888" strokeWidth={1} strokeDasharray="3 2"
+        vectorEffect="non-scaling-stroke"
       />
       <line
         x1={isoFrac} x2={isoFrac}
         y1={0} y2={HEIGHT}
-        stroke="#ffcc66" strokeWidth={0.005}
+        stroke="#ffcc66" strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
       />
       {hoverFrac != null && (
         <line
           x1={hoverFrac} x2={hoverFrac}
           y1={0} y2={HEIGHT}
-          stroke="#fff" strokeWidth={0.003} opacity={0.5}
+          stroke="#fff" strokeWidth={1} opacity={0.6}
+          vectorEffect="non-scaling-stroke"
         />
       )}
     </svg>
