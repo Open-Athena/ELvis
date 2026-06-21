@@ -107,6 +107,10 @@ interface ControlsProps {
   /** Symmetric absolute-max for the heatmap histogram x-axis. Defaults to
    *  `maxDensity` (unsigned data); diff mode passes `max(|min|, |max|)`. */
   dataAbsMax?: number
+  /** Signed-volume voxel statistics, surfaced under the heatmap histogram in
+   *  diff mode. `sumPos + sumNeg` (a near-zero number for a well-conserved
+   *  diff) is shown as "net". */
+  voxelStats?: { posCount: number; negCount: number; sumPos: number; sumNeg: number }
   heatmapStepCount?: number
   onHeatmapStepCountChange?: (v: number) => void
   /** Zarr data-source toggle (prefer chunked multi-res zarr where available). */
@@ -202,6 +206,7 @@ export function Controls({
   heatmapCutoffAnim,
   onHeatmapCutoffAnimChange,
   dataAbsMax,
+  voxelStats,
   heatmapStepCount = 256,
   onHeatmapStepCountChange,
   useZarr,
@@ -499,6 +504,27 @@ export function Controls({
                 />
                 Animate cutoff changes
               </label>
+            )}
+            {isDiff && voxelStats && (
+              <div
+                title="Voxel-level sums for the signed diff. Net (≈ sumPos + sumNeg) should be near zero when the model conserves charge globally."
+                style={{
+                  display: 'grid', gridTemplateColumns: 'auto 1fr auto', columnGap: 8, rowGap: 2,
+                  fontSize: 11, color: '#aaa', fontVariantNumeric: 'tabular-nums',
+                  padding: '4px 6px', marginTop: 4,
+                  background: '#1a1a2a', border: '1px solid #2a2a3e', borderRadius: 3,
+                }}
+              >
+                <span style={{ color: '#5be080' }}>+ voxels</span>
+                <span style={{ textAlign: 'right' }}>{voxelStats.posCount.toLocaleString()}</span>
+                <span style={{ color: '#5be080', textAlign: 'right' }}>+{voxelStats.sumPos.toFixed(1)}</span>
+                <span style={{ color: '#ff5040' }}>− voxels</span>
+                <span style={{ textAlign: 'right' }}>{voxelStats.negCount.toLocaleString()}</span>
+                <span style={{ color: '#ff5040', textAlign: 'right' }}>{voxelStats.sumNeg.toFixed(1)}</span>
+                <span>net</span>
+                <span style={{ textAlign: 'right' }}>{(voxelStats.posCount - voxelStats.negCount).toLocaleString()}</span>
+                <span style={{ textAlign: 'right' }}>{((voxelStats.sumPos + voxelStats.sumNeg) >= 0 ? '+' : '') + (voxelStats.sumPos + voxelStats.sumNeg).toFixed(1)}</span>
+              </div>
             )}
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>

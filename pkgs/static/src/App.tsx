@@ -1529,18 +1529,22 @@ export default function App() {
     e.target.value = ''
   }, [])
 
-  const { maxDensity, dataAbsMax } = useMemo(() => {
-    if (!primaryFile) return { maxDensity: 1, dataAbsMax: 1 }
+  const { maxDensity, dataAbsMax, posCount, negCount, sumPos, sumNeg } = useMemo(() => {
+    if (!primaryFile) return { maxDensity: 1, dataAbsMax: 1, posCount: 0, negCount: 0, sumPos: 0, sumNeg: 0 }
     let max = 0
     let absMax = 0
+    let posCount = 0, negCount = 0
+    let sumPos = 0, sumNeg = 0
     const arr = primaryFile.data.grid.data
     for (let i = 0; i < arr.length; i++) {
       const v = arr[i]
       if (v > max) max = v
       const a = Math.abs(v)
       if (a > absMax) absMax = a
+      if (v > 0) { posCount++; sumPos += v }
+      else if (v < 0) { negCount++; sumNeg += v }
     }
-    return { maxDensity: max, dataAbsMax: absMax || 1 }
+    return { maxDensity: max, dataAbsMax: absMax || 1, posCount, negCount, sumPos, sumNeg }
   }, [primaryFile])
 
   const densityQuantiles = useMemo(() => {
@@ -1986,6 +1990,7 @@ export default function App() {
               heatmapCutoffAnim={settings.heatmapCutoffAnim}
               onHeatmapCutoffAnimChange={v => updateSettings({ heatmapCutoffAnim: v })}
               dataAbsMax={dataAbsMax}
+              voxelStats={srcRole === 'diff' ? { posCount, negCount, sumPos, sumNeg } : undefined}
               heatmapStepCount={heatmapStepCount}
               onHeatmapStepCountChange={setHeatmapStepCount}
               heatmapOpacity={heatmapOpacity}
