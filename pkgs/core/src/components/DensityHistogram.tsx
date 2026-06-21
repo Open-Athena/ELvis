@@ -11,6 +11,10 @@ interface DensityHistogramProps {
   maxDensity: number
   /** Quantile-mapped axis = each bin spans equal voxel count. False = density-linear. */
   equalize?: boolean
+  /** Signed/diff volumes: bin `|sortedSamples|` so negatives contribute to the
+   *  same bin as their positive counterparts (the iso renderer draws both ±
+   *  shells, so the histogram represents the magnitude distribution). */
+  signed?: boolean
   /** Number of histogram bins. */
   bins?: number
   /** Committed iso change — writes to URL via parent's debounced setter. */
@@ -30,7 +34,7 @@ const PAD_BOTTOM = 12
 
 export function DensityHistogram({
   sortedSamples, isoLevel, defaultIsoLevel, maxDensity,
-  equalize = false, bins = 64, onCommit, onPreview,
+  equalize = false, signed = false, bins = 64, onCommit, onPreview,
 }: DensityHistogramProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoverFrac, setHoverFrac] = useState<number | null>(null)
@@ -44,7 +48,16 @@ export function DensityHistogram({
     const n = sortedSamples.length
     if (n === 0) return { bars: new Uint32Array(bins), maxLogC: 0, lo: 0, hi: 1 }
     const lo = 0
-    const xCap = sortedSamples[Math.floor(X_AXIS_QUANTILE * (n - 1))]
+    // For signed data, the x-axis cap should be the 99.5% quantile of |val|,
+    // not of `val` itself (which would just give the positive tail). Probe
+    // both ends since the ascending-sorted array's most-negative and
+    // most-positive entries are the |val| extremes.
+    const xCap = signed
+      ? Math.max(
+        Math.abs(sortedSamples[Math.floor(0.005 * (n - 1))]),
+        Math.abs(sortedSamples[Math.floor(X_AXIS_QUANTILE * (n - 1))]),
+      )
+      : sortedSamples[Math.floor(X_AXIS_QUANTILE * (n - 1))]
     // Always include the current iso (and default iso) in the visible range so
     // the marker lines never clip off-screen when the user dials past the cap.
     const hi = equalize ? 1 : Math.min(maxDensity, Math.max(xCap, isoLevel * 1.05, defaultIsoLevel * 1.05))
@@ -52,6 +65,17 @@ export function DensityHistogram({
     if (equalize) {
       const per = n / bins
       for (let b = 0; b < bins; b++) counts[b] = Math.floor(per)
+    } else if (signed) {
+      // Signed: bin |val| so both ± contribute to the same magnitude bucket.
+      // sortedSamples isn't sorted by |val|, so single-pass bucketing.
+      const range = hi - lo || 1
+      const binW = range / bins
+      for (let k = 0; k < n; k++) {
+        const v = Math.abs(sortedSamples[k])
+        if (v > hi) continue
+        const b = Math.min(bins - 1, Math.floor(v / binW))
+        counts[b]++
+      }
     } else {
       const range = hi - lo || 1
       let j = 0
@@ -68,7 +92,7 @@ export function DensityHistogram({
       if (l > maxLogC) maxLogC = l
     }
     return { bars: counts, maxLogC: Math.max(0.1, maxLogC), lo, hi }
-  }, [sortedSamples, bins, equalize, maxDensity, isoLevel, defaultIsoLevel])
+  }, [sortedSamples, bins, equalize, signed, maxDensity, isoLevel, defaultIsoLevel])
 
   const densityToFrac = useCallback((v: number): number => {
     if (equalize) return densityToQuantile(v, sortedSamples)
@@ -89,8 +113,10 @@ export function DensityHistogram({
     return lo + cf * (hi - lo)
   }, [equalize, sortedSamples, lo, hi])
 
-  const isoFrac = densityToFrac(isoLevel)
-  const defaultFrac = densityToFrac(defaultIsoLevel)
+  // In signed mode the user scrubs the |iso| magnitude (the renderer draws
+  // both ±isoLevel shells), so the markers reflect |val| positions.
+  const isoFrac = densityToFrac(signed ? Math.abs(isoLevel) : isoLevel)
+  const defaultFrac = densityToFrac(signed ? Math.abs(defaultIsoLevel) : defaultIsoLevel)
 
   const fracFromEvent = useCallback((clientX: number): number => {
     const svg = svgRef.current

@@ -248,7 +248,7 @@ export function DensityViewer({
             ? <HeatmapRenderer volume={volume} dataMin={dataRange.min} dataMax={dataRange.max} signed={heatmapSigned} opacity={surfaceOpacityOverride ?? heatmapOpacity ?? opacity} gamma={heatmapGamma} lowCutoff={heatmapLowCutoff} lowCutoffPreviewRef={heatmapLowCutoffPreviewRef} lowCutoffAnim={heatmapCutoffAnim} stepCount={heatmapStepCount} equalize={heatmapEqualize} sortedSamples={sortedSamples} clipAtoms={showAtoms} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} />
             : useGpuVolume
               ? <VolumeRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
-              : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} />
+              : <IsosurfaceRenderer volume={volume} isoLevel={isoLevel} opacity={surfaceOpacityOverride ?? opacity} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} color={surfaceColor ?? undefined} signed={heatmapSigned} />
         }
         <CrystalStructure volume={volume} showAtoms={showAtoms} showAtomLabels={showAtomLabels} showAbcCell={showAbcCell} showXyzBox={showXyzBox} dashedLines={dashedLines} lineWidth={lineWidth} tiles={tiles} tilePadding={tilePadding} tileFade={tileFade} highlightElement={highlightElement} />
         {showSlice && sliceAxis !== undefined && sliceIndex !== undefined && (

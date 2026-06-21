@@ -310,13 +310,13 @@ export function Controls({
         </div>
       )}
 
-      {!isDiff && onUseHeatmapChange && (
+      {onUseHeatmapChange && (
       <DrawerSection id="surface" title="Surface" icon={<Atom size={ICON_SIZE} />} accent={ACCENT.surface} defaultOpen>
           {/* Iso surface and Volumetric heatmap are mutually exclusive render
               modes — checking one unchecks the other. Mirrors the toggle in
-              the Heatmap section so iso mode is just as discoverable. Hidden
-              in diff mode (signed data) since iso surfaces are essentially
-              special-case heatmap views there. */}
+              the Heatmap section so iso mode is just as discoverable.
+              In diff mode the iso surface is signed (renders ±iso shells
+              with red/green diverging colors). */}
           <label className={styles.toggle}>
             <input type="checkbox" checked={!useHeatmap} onChange={e => onUseHeatmapChange(!e.target.checked)} />
             Iso surface
@@ -347,6 +347,7 @@ export function Controls({
                 isoLevel={isoLevel}
                 defaultIsoLevel={defaultIsoLevel}
                 maxDensity={maxDensity}
+                signed={isDiff}
                 onCommit={onIsoLevelChange}
                 onPreview={onIsoPreview}
               />
@@ -455,9 +456,9 @@ export function Controls({
             <div className={styles.controlLabel}>
               <div className={styles.sliderHeader}>
                 <span title={isDiff
-                  ? "Densities with |val| / dataAbsMax below this fraction contribute zero alpha"
-                  : "Densities below this fraction contribute zero alpha (hard threshold)"
-                }>Low cutoff: {(displayedHeatmapLowCutoff ?? heatmapLowCutoff).toFixed(2)}</span>
+                  ? "Densities with |val| below this contribute zero alpha (URL stores the normalized fraction)"
+                  : "Densities below this contribute zero alpha (URL stores the normalized fraction)"
+                }>Low cutoff: {isDiff ? '±' : ''}{(((displayedHeatmapLowCutoff ?? heatmapLowCutoff)) * (dataAbsMax ?? maxDensity)).toFixed(2)}</span>
                 <button
                   className={styles.resetBtn}
                   onClick={() => onHeatmapLowCutoffChange(0)}
